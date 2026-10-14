@@ -14,6 +14,83 @@ if (!isset($_SESSION['username'])) {
 $admin_username = $_SESSION['username'];
 
 // ------------------------------------------------------------
+// AJAX: transaction breakdown for one medrep in one month. Used by the
+// "Month Amount" pop-up so the user can see exactly how the number was
+// reached. Uses the same rules as the summary query below.
+// ------------------------------------------------------------
+if (isset($_GET['detail'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    $d_name  = isset($_GET['name']) ? trim($_GET['name']) : '';
+    $d_month = isset($_GET['month']) ? intval($_GET['month']) : 0;
+    $d_year  = isset($_GET['year']) ? intval($_GET['year']) : 0;
+    if ($d_name === '' || $d_month < 1 || $d_month > 12 || $d_year < 2000 || $d_year > 2100) {
+        echo json_encode(['error' => 'Invalid request']);
+        exit();
+    }
+    $d_start = sprintf('%04d-%02d-01 00:00:00', $d_year, $d_month);
+    $d_end   = date('Y-m-t 23:59:59', strtotime($d_start));
+
+    $dstmt = $conn->prepare("
+        SELECT created_at, transaction_type, payment_method, remarks,
+               deposit, receiver_amount, receiver_name,
+               sender_amount, sender_name,
+               dinein, takeout, giftcard, cashout, interest
+        FROM employees
+        WHERE name = ? AND created_at >= ? AND created_at <= ?
+          AND (block IS NULL OR LOWER(TRIM(block)) <> 'block')
+        ORDER BY created_at ASC, id ASC
+    ");
+    $dstmt->bind_param('sss', $d_name, $d_start, $d_end);
+    $dstmt->execute();
+    $dres = $dstmt->get_result();
+
+    $items = [];
+    $t = ['deposit' => 0, 'sales' => 0, 'cashout' => 0, 'sent' => 0, 'net' => 0];
+    while ($x = $dres->fetch_assoc()) {
+        $pm      = strtolower(trim(str_replace(["\r", "\n"], '', (string)$x['payment_method'])));
+        $is_card = ($pm === 'card');
+
+        $dep   = floatval($x['deposit']) + floatval($x['receiver_amount']);
+        $sales = floatval($x['dinein']) + floatval($x['takeout']) + floatval($x['giftcard']);
+        $cash  = floatval($x['cashout']) + floatval($x['interest']);
+        $sent  = floatval($x['sender_amount']);
+
+        // Card-paid sales and cashout never touch the balance.
+        $sales_counted = $is_card ? 0 : $sales;
+        $cash_counted  = $is_card ? 0 : $cash;
+        $effect = $dep - $sent - ($sales_counted + $cash_counted);
+
+        $notes = [];
+        if ($x['transaction_type'] !== '') $notes[] = $x['transaction_type'];
+        if ($x['remarks'] !== '')          $notes[] = $x['remarks'];
+        if (floatval($x['receiver_amount']) != 0 && $x['receiver_name'] !== '') $notes[] = 'Received from ' . $x['receiver_name'];
+        if ($sent != 0 && $x['sender_name'] !== '')                              $notes[] = 'Sent to ' . $x['sender_name'];
+        if (floatval($x['interest']) != 0) $notes[] = 'Incl. interest ' . number_format(floatval($x['interest']), 2);
+
+        $items[] = [
+            'date'    => date('M j, Y', strtotime($x['created_at'])),
+            'notes'   => implode(' - ', $notes),
+            'method'  => $pm === '' ? '-' : $pm,
+            'card'    => $is_card,
+            'deposit' => $dep,
+            'sales'   => $sales,
+            'cashout' => $cash,
+            'sent'    => $sent,
+            'sales_counted'   => $sales_counted,
+            'cashout_counted' => $cash_counted,
+            'effect'  => round($effect, 2),
+        ];
+        $t['deposit'] += $dep;
+        $t['sales']   += $sales_counted;
+        $t['cashout'] += $cash_counted;
+        $t['sent']    += $sent;
+    }
+    $t['net'] = round($t['deposit'] - $t['sent'] - ($t['sales'] + $t['cashout']), 2);
+    echo json_encode(['name' => $d_name, 'items' => $items, 'totals' => $t]);
+    exit();
+}
+
+// ------------------------------------------------------------
 // Monthly Summary: who has a RECEIVABLE or PAYABLE in a given month.
 //
 // "Month net" uses only the transactions dated inside the selected
@@ -243,6 +320,35 @@ function rs_url($overrides = []) {
         .empty i { font-size: 30px; color: #c7dccb; display: block; margin-bottom: 10px; }
         .note { margin-top: 14px; font-size: 12.5px; color: #5c6b5e; max-width: 820px; line-height: 1.5; }
 
+
+        .search-wrap input { padding-left: 40px !important; }
+        .amt-link { text-decoration: none; border-bottom: 1px dashed currentColor; cursor: pointer; white-space: nowrap; }
+        .amt-link i { font-size: 11px; opacity: .7; }
+        .amt-link:hover { opacity: .8; }
+
+        .modal-bg { display: none; position: fixed; inset: 0; background: rgba(15,30,18,.55); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+        .modal-bg.open { display: flex; }
+        .modal { background: #fff; border-radius: 16px; width: 96vw; max-width: 1280px; max-height: 92vh; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0,0,0,.35); }
+        .modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 18px 22px; border-bottom: 1px solid #e5efe6; }
+        .modal-head h2 { margin: 0; font-size: 18px; }
+        .modal-head p { margin: 4px 0 0; font-size: 13px; color: #5c6b5e; }
+        .modal-close { background: #eaf6ec; border: none; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; font-size: 16px; color: #1b5e20; flex: none; }
+        .modal-close:hover { background: #d3ebd7; }
+        .modal-body { padding: 16px 22px 22px; overflow: auto; }
+        .modal-body table { font-size: 13px; width: 100%; table-layout: auto; }
+        .modal-body .table-wrap { overflow-x: auto; }
+        .modal-body thead th { white-space: nowrap; }
+        .modal-body tbody td { white-space: nowrap; vertical-align: middle; }
+        .modal-body td.left { text-align: left; }
+        .modal-body td.details { white-space: normal !important; min-width: 220px; max-width: 360px; text-align: left; line-height: 1.35; }
+        .modal-body tfoot td { white-space: nowrap; }
+        .modal-body thead th { padding: 10px 8px; font-size: 11.5px; }
+        .modal-body tbody td { padding: 9px 8px; }
+        .modal-body tr.card-row { opacity: .6; }
+        .tag-card { display: inline-block; background: #6b7a6d; color: #fff; font-size: 9.5px; font-weight: 800; padding: 2px 7px; border-radius: 999px; margin-left: 4px; white-space: nowrap; letter-spacing: .3px; }
+        .equation { margin-top: 16px; padding: 14px 16px; background: #f3faf4; border: 1px solid #dcebe0; border-radius: 12px; font-size: 14px; line-height: 1.7; }
+        .equation .result { font-size: 18px; font-weight: 800; }
+
         @media (max-width: 640px) {
             .main-content { margin-left: 0; padding: 18px; }
             .sidebar { display: none; }
@@ -381,7 +487,7 @@ function rs_url($overrides = []) {
                     <td><?= number_format($r['deposit'], 2) ?></td>
                     <td><?= number_format($r['payable'], 2) ?></td>
                     <td><?= number_format($r['cashout'], 2) ?></td>
-                    <td class="amt <?= $is_r ? 'red' : 'green' ?>"><?= number_format($r['net'], 2) ?></td>
+                    <td class="amt <?= $is_r ? 'red' : 'green' ?>"><a href="#" class="amt-link <?= $is_r ? 'red' : 'green' ?>" data-name="<?= htmlspecialchars($r['name'], ENT_QUOTES) ?>" title="Click to see how this was computed"><?= number_format($r['net'], 2) ?> <i class="fas fa-info-circle"></i></a></td>
                     <td class="<?= $r['balance'] < 0 ? 'red' : ($r['balance'] > 0 ? 'green' : 'muted') ?>"><strong><?= number_format($r['balance'], 2) ?></strong></td>
                 </tr>
             <?php endforeach; ?>
@@ -408,11 +514,81 @@ function rs_url($overrides = []) {
     </p>
 </div>
 
+
+<div class="modal-bg" id="detailModal">
+    <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+            <div>
+                <h2 id="detailTitle">Breakdown</h2>
+                <p id="detailSub"></p>
+            </div>
+            <button type="button" class="modal-close" id="detailClose" aria-label="Close"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" id="detailBody"></div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     if (document.getElementById('summaryTable') && typeof attachTableSearch === 'function') {
         attachTableSearch('summarySearch', '#summaryTable');
     }
+
+    // ---- Month Amount breakdown pop-up ----
+    var MONTH = <?= (int)$selected_month ?>, YEAR = <?= (int)$selected_year ?>, MONTH_LABEL = <?= json_encode($month_names[$selected_month] . ' ' . $selected_year) ?>;
+    var modal = document.getElementById('detailModal');
+    var body  = document.getElementById('detailBody');
+    function fmt(n) { return Number(n).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+    function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : t; return d.innerHTML; }
+    function closeModal() { modal.classList.remove('open'); }
+
+    document.getElementById('detailClose').addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal(); });
+
+    document.querySelectorAll('.amt-link').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+            e.preventDefault();
+            var name = a.getAttribute('data-name');
+            document.getElementById('detailTitle').textContent = name;
+            document.getElementById('detailSub').textContent = 'Transactions in ' + MONTH_LABEL + ' and how the Month Amount is computed';
+            body.innerHTML = '<p>Loading...</p>';
+            modal.classList.add('open');
+
+            fetch('receivables_summary.php?detail=1&name=' + encodeURIComponent(name) + '&month=' + MONTH + '&year=' + YEAR)
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.error) { body.innerHTML = '<p>' + esc(data.error) + '</p>'; return; }
+                    var h = '<div class="table-wrap"><table><thead><tr>' +
+                        '<th style="text-align:left">Date</th><th style="text-align:left">Details</th><th>Payment</th>' +
+                        '<th>Deposit</th><th title="Dine In + Take Out + Gift Card">Sales</th><th title="Cashout + Interest">Cashout</th><th>Sent</th><th>Effect</th>' +
+                        '</tr></thead><tbody>';
+                    data.items.forEach(function (it) {
+                        h += '<tr class="' + (it.card ? 'card-row' : '') + '">' +
+                            '<td class="left" style="white-space:nowrap">' + esc(it.date) + '</td>' +
+                            '<td class="details">' + esc(it.notes) + '</td>' +
+                            '<td>' + esc(it.method.toUpperCase()) + (it.card ? '<span class="tag-card">NOT COUNTED</span>' : '') + '</td>' +
+                            '<td>' + fmt(it.deposit) + '</td>' +
+                            '<td>' + fmt(it.sales) + '</td>' +
+                            '<td>' + fmt(it.cashout) + '</td>' +
+                            '<td>' + fmt(it.sent) + '</td>' +
+                            '<td class="' + (it.effect < 0 ? 'red' : (it.effect > 0 ? 'green' : 'muted')) + '"><strong>' + fmt(it.effect) + '</strong></td>' +
+                            '</tr>';
+                    });
+                    var t = data.totals;
+                    h += '</tbody></table></div>';
+                    h += '<div class="equation">' +
+                        'Deposits <strong>' + fmt(t.deposit) + '</strong> &minus; Sales <strong>' + fmt(t.sales) + '</strong>' +
+                        ' &minus; Cashout/Interest <strong>' + fmt(t.cashout) + '</strong> &minus; Sent <strong>' + fmt(t.sent) + '</strong><br>' +
+                        '= <span class="result ' + (t.net < 0 ? 'red' : 'green') + '">' + fmt(t.net) + '</span> ' +
+                        (t.net < 0 ? '&mdash; <strong>RECEIVABLE</strong>: this medrep\'s sales/cashouts were more than what they deposited, so they owe the business.'
+                                   : '&mdash; <strong>PAYABLE</strong>: this medrep deposited more than their sales/cashouts, so the business owes them.') +
+                        '</div>';
+                    body.innerHTML = h;
+                })
+                .catch(function () { body.innerHTML = '<p>Could not load the breakdown. Please try again.</p>'; });
+        });
+    });
 });
 </script>
 </body>
