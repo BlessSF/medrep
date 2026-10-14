@@ -463,7 +463,8 @@ $current_year = (int)date('Y');
         <li><button onclick="location.href='customer.php'"><i class="fas fa-users"></i>   CUSTOMERS</button></li>
         <li><button onclick="location.href='block_medrep.php'"><i class="fas fa-user-lock"></i>   BLOCK MEDREP</button></li>
         <li><button onclick="location.href='companies.php'"><i class="fas fa-building"></i>   COMPANIES</button></li>
-        <li><button onclick="location.href='daily.php'"><i class="fas fa-calendar-day"></i>   DAILY SALES</button></li>
+        <li><button onclick="location.href='daily.php'"><i class="fas fa-calendar-day"></i>   RECEIVABLES/PAYABLES</button></li>
+        <li><button onclick="location.href='receivables_summary.php'"><i class="fas fa-calendar-alt"></i>   SUMMARY</button></li>
         <li><button onclick="location.href='report.php'"><i class="fas fa-chart-line"></i>   SALES REPORTS</button></li>
         <li><button onclick="location.href='cashout.php'"><i class="fas fa-money-bill-wave"></i>   CASHOUT REPORT</button></li>
         <li><button onclick="location.href='users.php'"><i class="fas fa-users-cog"></i>   USERS</button></li>
@@ -473,7 +474,7 @@ $current_year = (int)date('Y');
 </div>
 
 <div class="main-content">
-    <a class="back-link" href="daily.php?<?= $use_range ? 'range_from=' . urlencode($range_from) . '&range_to=' . urlencode($range_to) : 'month=' . (int)$selected_month . '&year=' . (int)$selected_year ?>"><i class="fas fa-arrow-left"></i> Back to Daily Sales</a>
+    <a class="back-link" href="daily.php?<?= $use_range ? 'range_from=' . urlencode($range_from) . '&range_to=' . urlencode($range_to) : 'month=' . (int)$selected_month . '&year=' . (int)$selected_year ?>"><i class="fas fa-arrow-left"></i> Back to Receivables/Payables</a>
 
     <div class="page-heading">
         <div>

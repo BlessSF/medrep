@@ -67,6 +67,7 @@ a { color: var(--primary); }
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: var(--shadow-lg);
   padding-top: 28px !important;
+  overflow-y: auto;   /* sidebar now has 11 items; scroll on short screens */
 }
 
 .sidebar h2 {
