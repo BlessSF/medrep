@@ -1,0 +1,590 @@
+/* ============================================================
+   MEDREP — shared design system
+   Loaded AFTER each page's inline <style> block so it wins the
+   cascade for shared selectors (.sidebar, .summary-item, tables,
+   buttons, forms, etc.) without having to rewrite every page's
+   markup. Page-specific layout rules (widths, positions) stay in
+   the page; colors, type, spacing, and component look live here.
+   ============================================================ */
+
+:root {
+  --bg: #dcefe0;
+  --surface: #ffffff;
+  --surface-2: #eaf6ec;
+
+  --sidebar-start: #14361c;
+  --sidebar-end: #1b5e20;
+  --sidebar-text: #c9e6cd;
+  --sidebar-text-active: #ffffff;
+
+  --primary: #2e7d32;
+  --primary-dark: #1b5e20;
+  --primary-light: #e6f4e8;
+
+  --accent: #43a047;
+  --accent-dark: #2e7d32;
+
+  --success: #2e7d32;
+  --success-bg: #e7f8ee;
+  --danger: #e0364a;
+  --danger-bg: #fdeced;
+  --warning: #d98c00;
+  --warning-bg: #fdf3e0;
+
+  --text: #1f2b20;
+  --text-muted: #5c6b5e;
+  --border: #dcebe0;
+
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 20px;
+
+  --shadow-sm: 0 1px 2px rgba(20, 25, 50, 0.06);
+  --shadow: 0 6px 18px rgba(20, 25, 50, 0.08);
+  --shadow-lg: 0 16px 40px rgba(20, 25, 50, 0.14);
+
+  --font: "Segoe UI", -apple-system, BlinkMacSystemFont, "Inter", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* ---------- base ---------- */
+body {
+  font-family: var(--font) !important;
+  background: var(--bg) !important;
+  color: var(--text);
+  text-transform: none !important;
+  -webkit-font-smoothing: antialiased;
+  font-size: 15px !important;
+  line-height: 1.5;
+}
+
+h1, h2, h3 { color: var(--text); }
+
+a { color: var(--primary); }
+
+/* ---------- sidebar ---------- */
+.sidebar {
+  background: linear-gradient(180deg, var(--sidebar-start) 0%, var(--sidebar-end) 100%) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: var(--shadow-lg);
+  padding-top: 28px !important;
+}
+
+.sidebar h2 {
+  color: var(--sidebar-text-active) !important;
+  font-size: 16px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.2px;
+  padding-bottom: 20px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ---------- sidebar profile (avatar + greeting) ---------- */
+.sidebar-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px 20px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-avatar {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(145deg, var(--accent), var(--primary-dark));
+  color: #fff;
+  font-size: 17px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.15), var(--shadow-sm);
+}
+
+.sidebar-profile-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.sidebar-greeting {
+  color: var(--sidebar-text) !important;
+  font-size: 11.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
+}
+
+.sidebar-username {
+  color: var(--sidebar-text-active) !important;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar ul { padding: 0 14px !important; }
+
+.sidebar ul li { padding: 5px 0 !important; text-align: left !important; }
+
+.sidebar ul li button,
+.sidebar ul li a button {
+  width: 100% !important;
+  background: transparent !important;
+  color: var(--sidebar-text) !important;
+  border: none !important;
+  text-align: left !important;
+  padding: 12px 14px !important;
+  border-radius: var(--radius-sm) !important;
+  font-size: 14.5px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.3px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.12s ease;
+}
+
+.sidebar ul li button i { width: 18px; text-align: center; color: var(--accent); }
+
+.sidebar ul li button:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--sidebar-text-active) !important;
+  transform: translateX(2px);
+}
+
+/* ---------- main content ---------- */
+.main-content {
+  background: var(--bg) !important;
+  padding: 28px !important;
+}
+
+.main-content h1 {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  text-transform: none;
+}
+
+/* ---------- summary cards ---------- */
+.summary { gap: 18px !important; }
+
+.summary-item {
+  background: var(--surface) !important;
+  border: 1px solid var(--border);
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow-sm) !important;
+  padding: 18px 16px !important;
+  border-top: 3px solid var(--primary);
+}
+
+.summary-item:hover {
+  box-shadow: var(--shadow) !important;
+  transform: translateY(-3px) !important;
+}
+
+.summary-item h2 {
+  color: var(--text-muted) !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.summary-item p {
+  color: var(--text) !important;
+  font-size: 25px !important;
+}
+
+/* ---------- cards / containers ---------- */
+.transactions-container,
+.table-container,
+.form-container,
+.container {
+  background: var(--surface) !important;
+  border: 1px solid var(--border);
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+/* ---------- tables ---------- */
+table {
+  border-collapse: collapse;
+}
+
+.transactions-table,
+table {
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+  overflow: hidden;
+  font-size: 14.5px !important;
+  background: var(--surface) !important;
+}
+
+.transactions-table th,
+.transactions-table td,
+table th,
+table td {
+  border: none !important;
+  border-bottom: 1px solid var(--border) !important;
+  border-right: 1px solid var(--border) !important;
+  padding: 13px 11px !important;
+}
+
+.transactions-table th:last-child,
+.transactions-table td:last-child,
+table th:last-child,
+table td:last-child {
+  border-right: none !important;
+}
+
+/* header row: dark green with white text, whichever markup pattern
+   a page uses (real <thead> or a plain first <tr> of <th>s) */
+.transactions-table thead,
+table thead,
+table thead tr,
+table > tr:first-child,
+table th {
+  background: var(--primary-dark) !important;
+  color: #fff !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-bottom: 2px solid var(--accent) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.18) !important;
+}
+
+/* zebra striping so rows are easy to track without stark white */
+.transactions-table tbody tr:nth-child(even),
+table tr:nth-child(even) {
+  background: var(--surface-2);
+}
+
+.transactions-table tbody tr:hover,
+table tbody tr:hover,
+table tr:hover {
+  background: var(--primary-light) !important;
+}
+
+/* ---------- buttons, generally ---------- */
+button,
+input[type="submit"],
+input[type="button"],
+.btn {
+  font-family: var(--font);
+  background: var(--primary) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+  padding: 10px 16px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+button:hover,
+input[type="submit"]:hover,
+input[type="button"]:hover,
+.btn:hover {
+  background: var(--primary-dark) !important;
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+
+button:active,
+input[type="submit"]:active,
+.btn:active { transform: translateY(0); }
+
+/* semantic button variants used across the app */
+.edit-btn, .show-btn, .daily-sales-btn {
+  background: var(--accent) !important;
+}
+.edit-btn:hover, .show-btn:hover, .daily-sales-btn:hover {
+  background: var(--accent-dark) !important;
+}
+
+.delete-btn, .block-btn, .action-btn.delete-btn {
+  background: var(--danger) !important;
+}
+.delete-btn:hover, .block-btn:hover {
+  background: #b91c2f !important;
+}
+
+.unblock-btn {
+  background: var(--success) !important;
+}
+.unblock-btn:hover { background: #12813c !important; }
+
+/* Shown on rows that are already blocked -- navigates to the dedicated
+   Block Medrep page instead of unblocking inline. */
+.view-blocked-btn {
+  background: #6b7280 !important;
+}
+.view-blocked-btn:hover { background: #4b5563 !important; }
+
+.print-btn {
+  background: var(--text) !important;
+}
+.print-btn:hover { background: #0d1220 !important; }
+
+.password-btn, .action-btn.password-btn {
+  background: var(--warning) !important;
+}
+
+/* login / submit-style buttons that used a light green before */
+input[type="submit"]#loginBtn {
+  background: var(--primary) !important;
+  color: #fff !important;
+}
+input[type="submit"]#loginBtn:hover { background: var(--primary-dark) !important; }
+
+/* ---------- forms & inputs ---------- */
+input[type="text"],
+input[type="password"],
+input[type="number"],
+input[type="date"],
+input[type="email"],
+input[type="search"],
+select,
+textarea {
+  font-family: var(--font);
+  font-size: 14.5px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+  padding: 10px 12px !important;
+  background: var(--surface);
+  color: var(--text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none !important;
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px var(--primary-light) !important;
+}
+
+label {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* ---------- login page ---------- */
+.login-container {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-lg) !important;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+/* ---------- toast messages (success / error / info) ---------- */
+.success-message, .error-message, .message-box {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 12px 22px;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  text-align: center;
+  font-weight: 700;
+  font-size: 14px;
+}
+.success-message { background: var(--success-bg); color: var(--success); border: 1px solid #b9e6c4; }
+.error-message { background: var(--danger-bg); color: var(--danger); border: 1px solid #f6c3cb; }
+.message-box { background: var(--primary-light); color: var(--primary-dark); border: 1px solid #bfe3c5; }
+
+/* ---------- misc ---------- */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #b7d6bc; border-radius: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- inline-editable table cells ---------- */
+.inline-editable {
+  cursor: text;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+  border-radius: 4px;
+}
+.inline-editable:hover {
+  background: rgba(27, 94, 32, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(27, 94, 32, 0.25);
+}
+.inline-editable.editing {
+  background: #fffde7;
+  box-shadow: inset 0 0 0 2px #f9a825;
+  outline: none;
+}
+.inline-editable.saving {
+  opacity: 0.6;
+}
+.inline-editable.saved-flash {
+  background: #c8f7c5 !important;
+  transition: background 0.4s ease;
+}
+.inline-editable.save-error {
+  background: #fdecea !important;
+  box-shadow: inset 0 0 0 2px #c62828 !important;
+}
+.inline-edit-error-bubble {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: 50;
+  background: #c62828;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  padding: 6px 10px;
+  border-radius: 5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  white-space: normal;
+  max-width: 220px;
+}
+
+/* ---------- horizontally-scrollable tables ----------
+   Any wide table (lots of columns, e.g. the transaction records
+   table) gets its own scrollbar instead of blowing out the width
+   of the whole page. Works two ways:
+   1) an explicit wrapper with class="table-scroll" around a table
+      (several pages use this class already but never defined it),
+   2) as a safety net, plain <table> elements also scroll internally
+      on narrow screens so no page-wide horizontal scroll happens
+      just because a table has many columns. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 900px) {
+  table:not(.table-scroll table) {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+}
+
+/* ---------- responsive layout ----------
+   The sidebar + .main-content two-column layout (admin.php,
+   customer.php, companies.php, daily.php, report.php, cashout.php,
+   users.php, tracking.php, sales.php, summary.php,
+   summary_customer.php, ...) is fixed-width and was never adapted
+   for phones/tablets: the sidebar is `position:fixed; width:230px;
+   height:100vh`, and main-content pushes over with a matching
+   margin-left. Below this breakpoint the sidebar becomes a normal
+   (non-fixed) horizontally-wrapping top bar instead, and
+   main-content drops the reserved margin. */
+@media (max-width: 880px) {
+  .sidebar {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    padding-top: 14px !important;
+  }
+  .sidebar-profile { padding: 0 14px 14px; }
+  .sidebar ul {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .sidebar ul li {
+    padding: 0 !important;
+    flex: 1 1 auto;
+  }
+  .sidebar ul li button {
+    justify-content: center;
+    font-size: 13px !important;
+    padding: 10px 12px !important;
+    white-space: nowrap;
+  }
+  .main-content {
+    margin-left: 0 !important;
+    padding: 16px !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .summary-item p { font-size: 20px !important; }
+  .main-content h1 { font-size: 20px; }
+  .quick-add-toolbar .btn,
+  .quick-add-label { font-size: 12px !important; }
+}
+
+/* Belt-and-braces: no matter what fixed width an individual page's
+   own <style> sets on a container, it can never force horizontal
+   scrolling of the *whole page* on a phone/narrow laptop -- only
+   the inner scrollable pieces above (tables) should scroll
+   sideways. */
+@media (max-width: 900px) {
+  .container,
+  .form-container,
+  .table-container,
+  .profile-page {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+}
+
+html {
+  overflow-x: hidden;
+}
+
+/* ---------- generic table search bar ---------- */
+.table-search-wrap {
+  margin: 14px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.table-search-wrap input[type="text"] {
+  flex: 1;
+  max-width: 320px;
+  padding: 10px 14px;
+  border: 1px solid #c3ddc6;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 14px;
+  text-transform: none;
+}
+.table-search-wrap input[type="text"]:focus {
+  outline: none;
+  border-color: #1b5e20;
+  box-shadow: 0 0 0 2px rgba(27, 94, 32, 0.15);
+}
+.table-search-wrap i {
+  color: #1b5e20;
+}
+
+/* ---------- AJAX save/refresh states (assets/ajax-forms.js) ---------- */
+.ajax-toast {
+  animation: ajaxToastIn 0.2s ease-out;
+}
+@keyframes ajaxToastIn {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+/* Dims a table/container briefly while its data is being refreshed in
+   the background after a save, so it's clear something happened without
+   the jarring blank-page flash of a full reload. */
+.ajax-refreshing {
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+form.ajax-saving button[type="submit"] {
+  opacity: 0.7;
+  cursor: wait;
+}
