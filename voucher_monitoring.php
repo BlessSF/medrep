@@ -161,6 +161,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $flash = 'That voucher name already exists.'; $flash_type = 'err';
                 }
             }
+        } elseif ($act === 'delete_type') {
+            $s = $conn->prepare("SELECT name, (SELECT COUNT(*) FROM vouchers WHERE type_id = voucher_types.id) AS n FROM voucher_types WHERE id = ?");
+            $s->bind_param('i', $type_id);
+            $s->execute();
+            $vt = $s->get_result()->fetch_assoc();
+            $typed = mb_strtoupper(trim((string)($_POST['confirm_name'] ?? '')));
+            if (!$vt) {
+                $flash = 'Voucher not found.'; $flash_type = 'err';
+            } elseif ($typed !== mb_strtoupper(trim($vt['name']))) {
+                $flash = 'Not removed: the name you typed did not match.'; $flash_type = 'err';
+            } else {
+                $d1 = $conn->prepare("DELETE FROM vouchers WHERE type_id = ?");
+                $d1->bind_param('i', $type_id); $d1->execute();
+                $d2 = $conn->prepare("DELETE FROM voucher_types WHERE id = ?");
+                $d2->bind_param('i', $type_id); $d2->execute();
+                vm_log($conn, 'Voucher removed', $admin_username, "Removed voucher {$vt['name']} and its {$vt['n']} entries");
+                $flash = "Voucher \"{$vt['name']}\" was removed.";
+                $type_id = 0;
+            }
         } elseif ($act === 'set_beginning') {
             $beg = min(5000, max(0, (int)($_POST['beginning'] ?? 0)));
             $s = $conn->prepare("UPDATE voucher_types SET beginning = ? WHERE id = ?");
@@ -329,6 +348,14 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         .vm-item.clear:hover::before { background: #e0364a; }
         .main-content a.exportbtn { text-decoration: none; display: inline-block; background: #fff !important; color: #1b5e20 !important; border: 1px solid #2e7d32; border-radius: 8px; padding: 10px 16px; font-weight: 700; font-size: 14px; }
         .main-content a.exportbtn:hover { background: #e6f4e8 !important; }
+        .main-content .btn.removebtn { background: #fff !important; color: #c62839 !important; border: 1px solid #e8a3ab !important; box-shadow: none !important; }
+        .main-content .btn.removebtn:hover { background: #fdeced !important; border-color: #e0364a !important; }
+        .rm-icon { width: 58px; height: 58px; margin: 0 auto 10px; border-radius: 50%; background: #fdeced; color: #e0364a; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+        .rm-text { font-size: 13.5px; color: #3b4a3e; line-height: 1.5; text-align: center; text-transform: none; margin: 6px 0; }
+        .rm-text a { color: #1b5e20; font-weight: 700; }
+        .modal .btn.rmgo { background: #e0364a !important; color: #fff !important; }
+        .modal .btn.rmgo:hover { background: #c62839 !important; }
+        .modal .btn.rmgo:disabled { background: #f1b9bf !important; cursor: not-allowed; transform: none; }
         .savestate { font-size: 13px; font-weight: 700; color: #5c6b5e; }
         .savestate.err { color: #e0364a; }
         .empty { padding: 40px; text-align: center; color: #5c6b5e; }
@@ -454,6 +481,7 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         <label style="font-size:13px;font-weight:700;color:#1b5e20;"><input type="checkbox" id="onlyOut" onchange="filterRows()"> Show given out only</label>
         <div class="spacer"></div>
         <a class="btn exportbtn" href="voucher_export.php" title="Download every voucher as its own sheet in one Excel file"><i class="fas fa-file-excel"></i> Export to Excel</a>
+        <button type="button" class="btn removebtn" onclick="openModal('rmModal')"><i class="fas fa-trash-alt"></i> Remove voucher</button>
         <span id="saveState" class="savestate">All changes save automatically</span>
     </div>
 
@@ -482,6 +510,26 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
             </tbody>
         </table>
         <?php if (!$rows): ?><div class="empty">No series rows yet. Click <b>Change</b> under Beginning and enter the number of vouchers.</div><?php endif; ?>
+    </div>
+
+    <!-- Remove voucher -->
+    <div class="modal-bg" id="rmModal">
+        <form class="modal" method="POST" style="max-width:460px" onsubmit="return rmReady();">
+            <div class="rm-icon"><i class="fas fa-exclamation-triangle"></i></div>
+            <h2 style="text-align:center">Remove this voucher?</h2>
+            <p class="rm-text">You are about to permanently remove <b><?= h($cur['name']) ?></b> and all
+                <b><?= count($rows) ?> entries</b> in it (customers, dates, notes). This cannot be undone.</p>
+            <p class="rm-text"><a href="voucher_export.php">Download an Excel backup first</a></p>
+            <input type="hidden" name="token" value="<?= h($_SESSION['vm_token']) ?>">
+            <input type="hidden" name="type_id" value="<?= $type_id ?>">
+            <input type="hidden" name="action" value="delete_type">
+            <div class="field"><label>TYPE THE VOUCHER NAME TO CONFIRM</label>
+                <input type="text" name="confirm_name" id="rmName" autocomplete="off" placeholder="<?= h($cur['name']) ?>" oninput="rmCheck()"></div>
+            <div class="actions">
+                <button type="button" class="btn ghost" onclick="closeModal('rmModal')">Cancel</button>
+                <button class="btn rmgo" id="rmGo" disabled>Remove voucher</button>
+            </div>
+        </form>
     </div>
 
     <!-- Beginning stock -->
@@ -711,6 +759,10 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(refitAll);
 window.addEventListener('load', refitAll);
 
 window.addEventListener('beforeunload', e => { if (document.querySelector('#vt input.saving')) { e.preventDefault(); e.returnValue = ''; } });
+
+const RM_NAME = <?= json_encode($cur ? mb_strtoupper(trim($cur['name'])) : '') ?>;
+function rmCheck(){ document.getElementById('rmGo').disabled = document.getElementById('rmName').value.trim().toUpperCase() !== RM_NAME; }
+function rmReady(){ return document.getElementById('rmName').value.trim().toUpperCase() === RM_NAME; }
 
 function filterRows(){
     const q = document.getElementById('q').value.toLowerCase();
