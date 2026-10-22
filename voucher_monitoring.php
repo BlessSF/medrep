@@ -275,6 +275,8 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         td input.saved { border-color: #2e7d32; background: #e7f8ee; }
         td input.failed { border-color: #e0364a; background: #fdeced; }
         td input[type=text] { text-align: left; min-width: 120px; }
+        td input[data-f=customer_name], td input[data-f=redeemed_by], td input[data-f=mop] { text-transform: uppercase; }
+        td input[data-f=customer_name]::placeholder, td input[data-f=redeemed_by]::placeholder { text-transform: none; }
         td.dcell { white-space: nowrap; }
         .dwrap { position: relative; display: inline-block; }
         .dwrap input[data-date] { padding-right: 30px; text-align: center; }
@@ -295,6 +297,8 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         .vm-item.clear::before { background: #f3c1c6; }
         .vm-item.clear:hover { background: #fdeced; color: #b3202f; }
         .vm-item.clear:hover::before { background: #e0364a; }
+        .main-content a.exportbtn { text-decoration: none; display: inline-block; background: #fff !important; color: #1b5e20 !important; border: 1px solid #2e7d32; border-radius: 8px; padding: 10px 16px; font-weight: 700; font-size: 14px; }
+        .main-content a.exportbtn:hover { background: #e6f4e8 !important; }
         .savestate { font-size: 13px; font-weight: 700; color: #5c6b5e; }
         .savestate.err { color: #e0364a; }
         .empty { padding: 40px; text-align: center; color: #5c6b5e; }
@@ -397,6 +401,7 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         <div class="search"><i class="fas fa-search"></i><input type="text" id="q" placeholder="Search this table..." oninput="filterRows()"></div>
         <label style="font-size:13px;font-weight:700;color:#1b5e20;"><input type="checkbox" id="onlyOut" onchange="filterRows()"> Show given out only</label>
         <div class="spacer"></div>
+        <a class="btn exportbtn" href="voucher_export.php" title="Download every voucher as its own sheet in one Excel file"><i class="fas fa-file-excel"></i> Export to Excel</a>
         <span id="saveState" class="savestate">All changes save automatically</span>
     </div>
 
@@ -476,16 +481,17 @@ function setState(msg, err){ if (saveState){ saveState.textContent = msg; saveSt
 function saveField(inp, val){
     const tr = inp.closest('tr');
     const fd = new URLSearchParams({action:'autosave', token:TOKEN, id:tr.dataset.id, field:inp.dataset.f, value:(val !== undefined ? val : inp.value)});
+    inp.dataset.sent = inp.value;
     inp.classList.remove('saved','failed'); inp.classList.add('saving');
     setState('Saving...');
-    fetch('voucher_monitoring.php', {method:'POST', body:fd, headers:{'Content-Type':'application/x-www-form-urlencoded'}})
+    fetch('voucher_monitoring.php', {method:'POST', keepalive:true, body:fd, headers:{'Content-Type':'application/x-www-form-urlencoded'}})
       .then(r => r.json().then(j => ({ok:r.ok && j.ok, j})))
       .then(({ok, j}) => {
         inp.classList.remove('saving');
         if (!ok) throw new Error(j.error || 'Could not save');
-        if (inp.dataset.f === 'customer_name' || inp.dataset.f === 'redeemed_by' || inp.dataset.f === 'mop') { inp.value = j.value || ''; }
-        if (inp.dataset.date) { inp.dataset.iso = j.value || ''; inp.dataset.last = j.value || ''; inp.value = longDate(j.value || ''); fit(inp); }
-        else { inp.dataset.last = inp.value; fit(inp); }
+        if (document.activeElement !== inp && (inp.dataset.f === 'customer_name' || inp.dataset.f === 'redeemed_by' || inp.dataset.f === 'mop')) { inp.value = j.value || ''; }
+        if (inp.dataset.date) { inp.dataset.iso = j.value || ''; inp.dataset.last = j.value || ''; if (document.activeElement !== inp) { inp.value = longDate(j.value || ''); } fit(inp); }
+        else { inp.dataset.last = (j.value || ''); fit(inp); }
         inp.classList.add('saved'); setTimeout(() => inp.classList.remove('saved'), 1200);
         tr.classList.toggle('out', j.sold_out === 1); tr.classList.toggle('free', j.sold_out !== 1);
         const pill = tr.querySelector('.pill');
@@ -552,6 +558,7 @@ document.querySelectorAll('#vt tbody input[data-f]').forEach(inp => {
         return iso;                               // null = could not understand the date
     };
     const go = () => {
+        if (inp.classList.contains('saving') && inp.dataset.sent === inp.value) return;   // already being saved
         const v = current();
         if (v === null) {                         // bad date: put the old one back
             inp.classList.add('failed'); setState('Not saved: type a date like January 15, 2026', true);
@@ -564,10 +571,9 @@ document.querySelectorAll('#vt tbody input[data-f]').forEach(inp => {
     };
     inp.addEventListener('change', go);
     inp.addEventListener('blur', go);
-    inp.addEventListener('input', () => {
+    inp.addEventListener('input', () => {         // typing only resizes the cell; saving happens when you finish
         fit(inp);
-        if (isDate) return;                       // dates save when you leave the cell / press Enter
-        clearTimeout(timers.get(inp)); timers.set(inp, setTimeout(go, 700));
+        setState('Press Enter or click away to save');
     });
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); inp.blur(); } });
 
