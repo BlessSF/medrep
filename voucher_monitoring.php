@@ -31,6 +31,7 @@ $conn->query("CREATE TABLE IF NOT EXISTS vouchers (
     date_sold DATE NULL,
     sold_out TINYINT NOT NULL DEFAULT 0,
     customer_name VARCHAR(150) NULL,
+    redeemed_by VARCHAR(150) NULL,
     mop VARCHAR(60) NULL,
     remarks VARCHAR(255) NULL,
     date_availed DATE NULL,
@@ -40,6 +41,12 @@ $conn->query("CREATE TABLE IF NOT EXISTS vouchers (
     KEY idx_customer (customer_name),
     FOREIGN KEY (type_id) REFERENCES voucher_types(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// Older installs: add the "Redeemed By" column if it isn't there yet.
+$chk = $conn->query("SHOW COLUMNS FROM vouchers LIKE 'redeemed_by'");
+if ($chk && $chk->num_rows === 0) {
+    $conn->query("ALTER TABLE vouchers ADD COLUMN redeemed_by VARCHAR(150) NULL AFTER customer_name");
+}
 
 if (empty($_SESSION['vm_token'])) {
     $_SESSION['vm_token'] = bin2hex(random_bytes(16));
@@ -85,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'autos
     $id    = (int)($_POST['id'] ?? 0);
     $field = (string)($_POST['field'] ?? '');
     $raw   = trim((string)($_POST['value'] ?? ''));
-    $fields = ['date_sold' => 'date', 'date_availed' => 'date', 'customer_name' => 'upper', 'mop' => 'upper', 'remarks' => 'text', 'note' => 'text'];
+    $fields = ['date_sold' => 'date', 'date_availed' => 'date', 'customer_name' => 'upper', 'redeemed_by' => 'upper', 'mop' => 'upper', 'remarks' => 'text', 'note' => 'text'];
     if (!isset($fields[$field])) { $out(['ok' => false, 'error' => 'Invalid field.'], 400); }
 
     if ($fields[$field] === 'date') {
@@ -191,7 +198,7 @@ $cur = $type_id ? $types[$type_id] : null;
 $rows = [];
 $next_series = 1;
 if ($cur) {
-    $s = $conn->prepare("SELECT id, series_no, date_sold, sold_out, customer_name, mop, remarks, date_availed, note FROM vouchers WHERE type_id = ? ORDER BY series_no");
+    $s = $conn->prepare("SELECT id, series_no, date_sold, sold_out, customer_name, redeemed_by, mop, remarks, date_availed, note FROM vouchers WHERE type_id = ? ORDER BY series_no");
     $s->bind_param('i', $type_id);
     $s->execute();
     $res = $s->get_result();
@@ -397,7 +404,7 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         <table id="vt">
             <thead>
                 <tr>
-                    <th>DATE</th><th>SOLD OUT</th><th>SERIES NO.</th><th>CUSTOMER NAME</th>
+                    <th>DATE</th><th>SOLD OUT</th><th>SERIES NO.</th><th>CUSTOMER NAME</th><th>REDEEMED BY</th>
                     <th>MODE OF PAYMENT</th><th>REMARKS (SPONSORSHIP OR SOLD)</th><th>DATE AVAILED</th><th>NOTE (C/O ACCTNG)</th>
                 </tr>
             </thead>
@@ -408,6 +415,7 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
                     <td><span class="pill <?= $r['sold_out'] ? 'out' : 'free' ?>"><?= $r['sold_out'] ? 'OUT' : 'IN STOCK' ?></span></td>
                     <td><b><?= str_pad((string)$r['series_no'], 3, '0', STR_PAD_LEFT) ?></b></td>
                     <td><input type="text" data-f="customer_name" value="<?= h($r['customer_name']) ?>" autocomplete="off"></td>
+                    <td><input type="text" data-f="redeemed_by" value="<?= h($r['redeemed_by']) ?>" placeholder="Who redeemed it" autocomplete="off"></td>
                     <td><input type="text" data-f="mop" data-opts="mop" value="<?= h($r['mop']) ?>" autocomplete="off"></td>
                     <td><input type="text" data-f="remarks" data-opts="remarks" value="<?= h($r['remarks']) ?>" autocomplete="off"></td>
                     <td class="dcell"><div class="dwrap"><input type="text" data-f="date_availed" data-date="1" data-iso="<?= h($r['date_availed']) ?>" value="<?= h(fmt_date($r['date_availed'])) ?>" placeholder="Pick a date" autocomplete="off"><button type="button" class="cal" tabindex="-1" title="Pick from calendar"><i class="fas fa-calendar-alt"></i></button><input type="date" class="hid" tabindex="-1" value="<?= h($r['date_availed']) ?>"></div></td>
@@ -475,7 +483,7 @@ function saveField(inp, val){
       .then(({ok, j}) => {
         inp.classList.remove('saving');
         if (!ok) throw new Error(j.error || 'Could not save');
-        if (inp.dataset.f === 'customer_name' || inp.dataset.f === 'mop') { inp.value = j.value || ''; }
+        if (inp.dataset.f === 'customer_name' || inp.dataset.f === 'redeemed_by' || inp.dataset.f === 'mop') { inp.value = j.value || ''; }
         if (inp.dataset.date) { inp.dataset.iso = j.value || ''; inp.dataset.last = j.value || ''; inp.value = longDate(j.value || ''); fit(inp); }
         else { inp.dataset.last = inp.value; fit(inp); }
         inp.classList.add('saved'); setTimeout(() => inp.classList.remove('saved'), 1200);
