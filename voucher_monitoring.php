@@ -228,11 +228,41 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         .sidebar ul li button { width: 100%; padding: 15px; background-color: #abd67c; color: #000; border: none; cursor: pointer; font-weight: bold; font-size: 15px; border-radius: 5px; }
         .main-content { margin-left: 230px; padding: 20px; }
 
-        .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
-        .tab { padding: 9px 16px; border-radius: 999px; background: #fff; border: 1px solid #cfe3d3; color: #1b5e20; font-weight: 700; font-size: 13px; text-decoration: none; }
-        .tab:hover { background: #e6f4e8; }
-        .tab.active { background: #1b5e20; color: #fff; border-color: #1b5e20; }
-        .tab.add { border-style: dashed; cursor: pointer; background: transparent; }
+        /* ---------- page header ---------- */
+        .pagehead { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 4px 0 22px; padding: 20px 24px; border-radius: 18px; color: #fff;
+                    background: radial-gradient(circle at 92% -20%, rgba(255,255,255,.18), transparent 45%), linear-gradient(120deg, #14361c 0%, #1b5e20 55%, #2e7d32 100%);
+                    box-shadow: 0 10px 28px rgba(27,94,32,.28); }
+        .ph-badge { width: 54px; height: 54px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff;
+                    background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28); transform: rotate(-6deg); }
+        .ph-title { font-size: 26px; font-weight: 800; letter-spacing: .2px; line-height: 1.1; }
+        .ph-sub { margin-top: 5px; font-size: 13px; color: #cfe9d3; }
+        .ph-stats { margin-left: auto; display: flex; gap: 10px; flex-wrap: wrap; }
+        .ph-stat { min-width: 92px; padding: 10px 16px; border-radius: 12px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); text-align: center; }
+        .ph-stat b { display: block; font-size: 22px; line-height: 1.1; }
+        .ph-stat span { font-size: 11px; letter-spacing: .5px; color: #cfe9d3; text-transform: uppercase; }
+
+        /* ---------- voucher tabs ---------- */
+        .tabs { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+        .tab { display: flex; flex-direction: column; gap: 7px; min-width: 190px; max-width: 260px; padding: 13px 16px; border-radius: 14px; background: #fff; border: 1px solid #d7e8da;
+               color: #1b3a22; text-decoration: none; text-align: left; box-shadow: 0 1px 3px rgba(20,54,28,.08); transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+        .tab:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(20,54,28,.14); border-color: #2e7d32; }
+        .tab-top { display: flex; align-items: center; gap: 9px; }
+        .tab-top i { width: 28px; height: 28px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #2e7d32; background: #e6f4e8; flex: none; }
+        .tab-name { font-size: 13px; font-weight: 800; letter-spacing: .3px; line-height: 1.2; }
+        .tab-meta { font-size: 12px; color: #5c6b5e; }
+        .tab-meta b { color: #1b3a22; font-size: 13px; }
+        .tab-bar { display: block; height: 6px; border-radius: 999px; background: #e3efe5; overflow: hidden; }
+        .tab-bar span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #43a047, #2e7d32); }
+        .tab.over .tab-bar span { background: linear-gradient(90deg, #ef6b78, #e0364a); }
+        .tab.active { background: linear-gradient(135deg, #1b5e20, #2e7d32); border-color: #1b5e20; color: #fff; box-shadow: 0 10px 22px rgba(27,94,32,.35); }
+        .tab.active .tab-top i { background: rgba(255,255,255,.2); color: #fff; }
+        .tab.active .tab-meta, .tab.active .tab-meta b { color: #e3f3e6; }
+        .tab.active .tab-bar { background: rgba(255,255,255,.25); }
+        .tab.active .tab-bar span { background: #fff; }
+        .tab.active.over .tab-bar span { background: #ffd0d4; }
+        .tab.add { flex-direction: row; align-items: center; justify-content: center; gap: 10px; min-width: 150px; background: transparent; border: 2px dashed #7fb986; color: #1b5e20; cursor: pointer; box-shadow: none; }
+        .tab.add:hover { background: #e6f4e8; border-color: #2e7d32; }
+        .tab.add .plus { width: 28px; height: 28px; border-radius: 50%; background: #2e7d32; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; }
 
         .summary { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 20px; }
         .summary-item { flex: 1 1 180px; background: #fff; border-radius: 12px; padding: 18px 16px; text-align: center; border-top: 3px solid #2e7d32; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
@@ -316,7 +346,8 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         .sidebar { z-index: 100 !important; }   /* always stay above the table, even when the page scrolls sideways */
         .main-content .linkbtn { background: none !important; color: #1b5e20 !important; box-shadow: none !important; padding: 2px 4px !important; font-size: 12px !important; text-decoration: underline; transform: none !important; }
         .main-content .btn.ghost, .modal .btn.ghost { background: #e6f4e8 !important; color: #1b5e20 !important; }
-                .main-content .tab.add { background: transparent !important; color: #1b5e20 !important; border: 1px dashed #1b5e20 !important; box-shadow: none !important; padding: 9px 16px !important; }
+                .main-content .tab.add { background: transparent !important; color: #1b5e20 !important; border: 2px dashed #7fb986 !important; box-shadow: none !important; padding: 13px 16px !important; font-size: 13px !important; letter-spacing: .3px; transform: none; }
+        .main-content .tab.add:hover { background: #e6f4e8 !important; border-color: #2e7d32 !important; }
         /* assets/style.css puts overflow:hidden on every <table>, which stops sticky headers from working.
            Undo it here so the dark green header row stays visible while scrolling. */
         .main-content #vt { overflow: visible !important; border: none !important; border-radius: 0 !important; }
@@ -360,15 +391,36 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
 </div>
 
 <div class="main-content">
-    <h1>VOUCHER MONITORING</h1>
+    <div class="pagehead">
+        <div class="ph-badge"><i class="fas fa-ticket-alt"></i></div>
+        <div>
+            <div class="ph-title">Voucher Monitoring</div>
+            <div class="ph-sub">Track every voucher from stock to customer to redeemed.</div>
+        </div>
+        <div class="ph-stats">
+            <?php $all_out = 0; $all_beg = 0; foreach ($types as $tt) { $all_out += (int)$tt['total_out']; $all_beg += (int)$tt['beginning']; } ?>
+            <div class="ph-stat"><b><?= count($types) ?></b><span>Vouchers</span></div>
+            <div class="ph-stat"><b><?= $all_out ?></b><span>Given out</span></div>
+            <div class="ph-stat"><b><?= $all_beg - $all_out ?></b><span>Left in stock</span></div>
+        </div>
+    </div>
 
     <?php if ($flash): ?><div class="flash <?= h($flash_type) ?>"><?= h($flash) ?></div><?php endif; ?>
 
     <div class="tabs">
-        <?php foreach ($types as $t): ?>
-            <a class="tab <?= $t['id'] == $type_id ? 'active' : '' ?>" href="?type=<?= (int)$t['id'] ?>"><?= h($t['name']) ?></a>
+        <?php foreach ($types as $t):
+            $tb = (int)$t['beginning']; $to = (int)$t['total_out']; $left = $tb - $to;
+            $pct = $tb > 0 ? min(100, round($to / $tb * 100)) : 0; ?>
+            <a class="tab <?= $t['id'] == $type_id ? 'active' : '' ?> <?= $left < 0 ? 'over' : '' ?>" href="?type=<?= (int)$t['id'] ?>">
+                <span class="tab-top"><i class="fas fa-ticket-alt"></i><span class="tab-name"><?= h($t['name']) ?></span></span>
+                <span class="tab-meta"><b><?= $to ?></b> out &middot; <b><?= $left ?></b> left</span>
+                <span class="tab-bar"><span style="width:<?= $pct ?>%"></span></span>
+            </a>
         <?php endforeach; ?>
-        <button type="button" class="tab add" onclick="openModal('typeModal')"><i class="fas fa-plus"></i> New voucher</button>
+        <button type="button" class="tab add" onclick="openModal('typeModal')">
+            <span class="plus"><i class="fas fa-plus"></i></span>
+            <span class="tab-name">New voucher</span>
+        </button>
     </div>
 
 <?php if (!$cur): ?>
