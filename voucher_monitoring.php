@@ -204,7 +204,7 @@ $availed   = 0;
 foreach ($rows as $r) { if ($r['date_availed']) $availed++; }
 
 function h($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
-function fmt_date($d) { return $d ? date('M j, Y', strtotime($d)) : ''; }
+function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
 ?>
 <!DOCTYPE html>
 <html>
@@ -268,6 +268,11 @@ function fmt_date($d) { return $d ? date('M j, Y', strtotime($d)) : ''; }
         td input.saved { border-color: #2e7d32; background: #e7f8ee; }
         td input.failed { border-color: #e0364a; background: #fdeced; }
         td input[type=text] { text-align: left; min-width: 120px; }
+        td.dcell { white-space: nowrap; }
+        .dwrap { position: relative; display: inline-block; }
+        .dwrap input[data-date] { padding-right: 30px; text-align: center; }
+        .dwrap .hid { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; padding: 0; border: 0; }
+        .main-content .dwrap .cal { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: none !important; color: #2e7d32 !important; box-shadow: none !important; padding: 4px !important; font-size: 13px !important; }
         .savestate { font-size: 13px; font-weight: 700; color: #5c6b5e; }
         .savestate.err { color: #e0364a; }
         .empty { padding: 40px; text-align: center; color: #5c6b5e; }
@@ -370,13 +375,13 @@ function fmt_date($d) { return $d ? date('M j, Y', strtotime($d)) : ''; }
             <tbody>
             <?php foreach ($rows as $r): $rid = (int)$r['id']; ?>
                 <tr class="<?= $r['sold_out'] ? 'out' : 'free' ?>" data-id="<?= $rid ?>">
-                    <td><input type="date" data-f="date_sold" value="<?= h($r['date_sold']) ?>"></td>
+                    <td class="dcell"><div class="dwrap"><input type="text" data-f="date_sold" data-date="1" data-iso="<?= h($r['date_sold']) ?>" value="<?= h(fmt_date($r['date_sold'])) ?>" placeholder="Pick a date" autocomplete="off"><button type="button" class="cal" tabindex="-1" title="Pick from calendar"><i class="fas fa-calendar-alt"></i></button><input type="date" class="hid" tabindex="-1" value="<?= h($r['date_sold']) ?>"></div></td>
                     <td><span class="pill <?= $r['sold_out'] ? 'out' : 'free' ?>"><?= $r['sold_out'] ? 'OUT' : 'IN STOCK' ?></span></td>
                     <td><b><?= str_pad((string)$r['series_no'], 3, '0', STR_PAD_LEFT) ?></b></td>
                     <td><input type="text" data-f="customer_name" value="<?= h($r['customer_name']) ?>" autocomplete="off"></td>
                     <td><input type="text" data-f="mop" list="mopList" value="<?= h($r['mop']) ?>" autocomplete="off"></td>
                     <td><input type="text" data-f="remarks" list="remList" value="<?= h($r['remarks']) ?>" autocomplete="off"></td>
-                    <td><input type="date" data-f="date_availed" value="<?= h($r['date_availed']) ?>"></td>
+                    <td class="dcell"><div class="dwrap"><input type="text" data-f="date_availed" data-date="1" data-iso="<?= h($r['date_availed']) ?>" value="<?= h(fmt_date($r['date_availed'])) ?>" placeholder="Pick a date" autocomplete="off"><button type="button" class="cal" tabindex="-1" title="Pick from calendar"><i class="fas fa-calendar-alt"></i></button><input type="date" class="hid" tabindex="-1" value="<?= h($r['date_availed']) ?>"></div></td>
                     <td><input type="text" data-f="note" value="<?= h($r['note']) ?>" autocomplete="off"></td>
                 </tr>
             <?php endforeach; ?>
@@ -434,9 +439,9 @@ const timers = new WeakMap();
 
 function setState(msg, err){ if (saveState){ saveState.textContent = msg; saveState.classList.toggle('err', !!err); } }
 
-function saveField(inp){
+function saveField(inp, val){
     const tr = inp.closest('tr');
-    const fd = new URLSearchParams({action:'autosave', token:TOKEN, id:tr.dataset.id, field:inp.dataset.f, value:inp.value});
+    const fd = new URLSearchParams({action:'autosave', token:TOKEN, id:tr.dataset.id, field:inp.dataset.f, value:(val !== undefined ? val : inp.value)});
     inp.classList.remove('saved','failed'); inp.classList.add('saving');
     setState('Saving...');
     fetch('voucher_monitoring.php', {method:'POST', body:fd, headers:{'Content-Type':'application/x-www-form-urlencoded'}})
@@ -445,7 +450,8 @@ function saveField(inp){
         inp.classList.remove('saving');
         if (!ok) throw new Error(j.error || 'Could not save');
         if (inp.dataset.f === 'customer_name' || inp.dataset.f === 'mop') { inp.value = j.value || ''; }
-        inp.dataset.last = inp.value;
+        if (inp.dataset.date) { inp.dataset.iso = j.value || ''; inp.dataset.last = j.value || ''; inp.value = longDate(j.value || ''); fit(inp); }
+        else { inp.dataset.last = inp.value; fit(inp); }
         inp.classList.add('saved'); setTimeout(() => inp.classList.remove('saved'), 1200);
         tr.classList.toggle('out', j.sold_out === 1); tr.classList.toggle('free', j.sold_out !== 1);
         const pill = tr.querySelector('.pill');
@@ -461,16 +467,78 @@ function saveField(inp){
       .catch(e => { inp.classList.remove('saving'); inp.classList.add('failed'); setState('Not saved: ' + e.message, true); });
 }
 
-document.querySelectorAll('#vt tbody input').forEach(inp => {
-    inp.dataset.last = inp.value;
-    const go = () => { if (inp.value !== inp.dataset.last) saveField(inp); };
-    inp.addEventListener('change', go);                       // dates, datalist picks, leaving the cell
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function longDate(iso){
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+    return m ? MONTHS[+m[2]-1] + ' ' + (+m[3]) + ', ' + m[1] : '';
+}
+// Accepts: 2026-01-15, 1/15/2026, 1-15-26, January 15, 2026, Jan 15 2026, 15 January 2026
+function parseDate(str){
+    str = (str || '').trim();
+    if (str === '') return '';
+    let y, mo, d, m;
+    const pad = n => String(n).padStart(2, '0');
+    const fy = v => v < 100 ? 2000 + v : v;
+    if ((m = /^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/.exec(str))) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+    else if ((m = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})$/.exec(str))) { mo = +m[1]; d = +m[2]; y = fy(+m[3]); }
+    else if ((m = /^([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{2,4})$/.exec(str))) { mo = monthIdx(m[1]); d = +m[2]; y = fy(+m[3]); }
+    else if ((m = /^(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\.?,?\s+(\d{2,4})$/.exec(str))) { d = +m[1]; mo = monthIdx(m[2]); y = fy(+m[3]); }
+    else return null;
+    if (!mo || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    const t = new Date(y, mo - 1, d);
+    if (t.getFullYear() !== y || t.getMonth() !== mo - 1 || t.getDate() !== d) return null;
+    return y + '-' + pad(mo) + '-' + pad(d);
+}
+function monthIdx(name){
+    name = name.toLowerCase();
+    const i = MONTHS.findIndex(x => x.toLowerCase() === name || x.toLowerCase().slice(0,3) === name.slice(0,3));
+    return i < 0 ? 0 : i + 1;
+}
+// Make every cell exactly as wide as what is typed in it
+function fit(inp){
+    const min = inp.dataset.date ? 21 : 12;
+    inp.style.width = Math.max(min, (inp.value || inp.placeholder || '').length + 3) + 'ch';
+}
+
+document.querySelectorAll('#vt tbody input[data-f]').forEach(inp => {
+    const isDate = !!inp.dataset.date;
+    inp.dataset.last = isDate ? inp.dataset.iso : inp.value;
+    fit(inp);
+
+    const current = () => {                       // the value to send to the server
+        if (!isDate) return inp.value;
+        const iso = parseDate(inp.value);
+        return iso;                               // null = could not understand the date
+    };
+    const go = () => {
+        const v = current();
+        if (v === null) {                         // bad date: put the old one back
+            inp.classList.add('failed'); setState('Not saved: type a date like January 15, 2026', true);
+            inp.value = longDate(inp.dataset.last); fit(inp);
+            setTimeout(() => inp.classList.remove('failed'), 1500);
+            return;
+        }
+        if (v !== inp.dataset.last) saveField(inp, v);
+        else if (isDate) { inp.value = longDate(v); fit(inp); }
+    };
+    inp.addEventListener('change', go);
     inp.addEventListener('blur', go);
-    inp.addEventListener('input', () => {                     // typing: save shortly after you stop
-        if (inp.type === 'date') return;
+    inp.addEventListener('input', () => {
+        fit(inp);
+        if (isDate) return;                       // dates save when you leave the cell / press Enter
         clearTimeout(timers.get(inp)); timers.set(inp, setTimeout(go, 700));
     });
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); inp.blur(); } });
+
+    if (isDate) {                                 // calendar button -> native picker -> long format
+        const wrap = inp.closest('.dwrap');
+        const pick = wrap.querySelector('.hid');
+        wrap.querySelector('.cal').addEventListener('click', () => {
+            pick.value = parseDate(inp.value) || '';
+            try { pick.showPicker(); } catch (e) { pick.focus(); pick.click(); }
+        });
+        pick.addEventListener('change', () => { inp.value = longDate(pick.value); fit(inp); go(); });
+    }
 });
 window.addEventListener('beforeunload', e => { if (document.querySelector('#vt input.saving')) { e.preventDefault(); e.returnValue = ''; } });
 
