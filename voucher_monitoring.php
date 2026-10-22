@@ -302,6 +302,7 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         .field input, .field select { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #cfe3d3; border-radius: 8px; font-size: 14px; }
         .modal .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
         /* assets/style.css forces every <button> green with !important; re-assert the variants used here */
+        .sidebar { z-index: 100 !important; }   /* always stay above the table, even when the page scrolls sideways */
         .main-content .linkbtn { background: none !important; color: #1b5e20 !important; box-shadow: none !important; padding: 2px 4px !important; font-size: 12px !important; text-decoration: underline; transform: none !important; }
         .main-content .btn.ghost, .modal .btn.ghost { background: #e6f4e8 !important; color: #1b5e20 !important; }
                 .main-content .tab.add { background: transparent !important; color: #1b5e20 !important; border: 1px dashed #1b5e20 !important; box-shadow: none !important; padding: 9px 16px !important; }
@@ -520,9 +521,16 @@ function monthIdx(name){
     return i < 0 ? 0 : i + 1;
 }
 // Make every cell exactly as wide as what is typed in it
+const measureCtx = document.createElement('canvas').getContext('2d');
 function fit(inp){
-    const min = inp.dataset.date ? 21 : 12;
-    inp.style.width = Math.max(min, (inp.value || inp.placeholder || '').length + 3) + 'ch';
+    const cs = getComputedStyle(inp);
+    measureCtx.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+    let t = inp.value || inp.placeholder || '';
+    if (cs.textTransform === 'uppercase') t = t.toUpperCase();
+    const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+    const min = inp.dataset.date ? 190 : (inp.dataset.opts ? 150 : 130);
+    const max = (inp.dataset.date || inp.dataset.opts) ? 400 : 260;   // very long text scrolls inside the cell instead of widening the table
+    inp.style.width = Math.ceil(Math.min(max, Math.max(min, measureCtx.measureText(t).width + pad + 14))) + 'px';
 }
 
 document.querySelectorAll('#vt tbody input[data-f]').forEach(inp => {
@@ -631,6 +639,10 @@ document.querySelectorAll('#vt tbody input[data-opts]').forEach(inp => {
 });
 window.addEventListener('scroll', closeMenu, true);
 window.addEventListener('resize', closeMenu);
+
+const refitAll = () => document.querySelectorAll('#vt tbody input[data-f]').forEach(fit);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(refitAll);
+window.addEventListener('load', refitAll);
 
 window.addEventListener('beforeunload', e => { if (document.querySelector('#vt input.saving')) { e.preventDefault(); e.returnValue = ''; } });
 
