@@ -58,6 +58,16 @@ function vm_text($v) {
     return $v === '' ? null : mb_substr($v, 0, 255);
 }
 
+// Create empty (in-stock) rows for series 1..$n that don't exist yet for a voucher type.
+function vm_fill_series($conn, $type_id, $n) {
+    $n = min(max(0, (int)$n), 5000);
+    for ($start = 1; $start <= $n; $start += 500) {
+        $vals = [];
+        for ($i = $start; $i < $start + 500 && $i <= $n; $i++) { $vals[] = "($type_id,$i)"; }
+        $conn->query("INSERT IGNORE INTO vouchers (type_id, series_no) VALUES " . implode(',', $vals));
+    }
+}
+
 $type_id = isset($_GET['type']) ? (int)$_GET['type'] : 0;
 $flash = '';
 $flash_type = 'ok';
@@ -75,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($act === 'add_type') {
             $name = strtoupper(trim((string)($_POST['name'] ?? '')));
-            $beg  = max(0, (int)($_POST['beginning'] ?? 0));
+            $beg  = min(5000, max(0, (int)($_POST['beginning'] ?? 0)));
             if ($name === '') {
                 $flash = 'Voucher name is required.'; $flash_type = 'err';
             } else {
@@ -84,19 +94,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $s->bind_param('sii', $name, $beg, $so);
                 if ($s->execute()) {
                     $type_id = $conn->insert_id;
+                    vm_fill_series($conn, $type_id, $beg);
                     vm_log($conn, 'Voucher type added', $admin_username, "Added voucher type $name (beginning $beg)");
-                    $flash = "Voucher type added.";
+                    $flash = "Voucher type added with $beg series rows (001-" . str_pad((string)$beg, 3, '0', STR_PAD_LEFT) . ").";
                 } else {
                     $flash = 'That voucher name already exists.'; $flash_type = 'err';
                 }
             }
         } elseif ($act === 'set_beginning') {
-            $beg = max(0, (int)($_POST['beginning'] ?? 0));
+            $beg = min(5000, max(0, (int)($_POST['beginning'] ?? 0)));
             $s = $conn->prepare("UPDATE voucher_types SET beginning = ? WHERE id = ?");
             $s->bind_param('ii', $beg, $type_id);
             $s->execute();
+            vm_fill_series($conn, $type_id, $beg);   // adds any missing series rows up to the new beginning
             vm_log($conn, 'Voucher beginning updated', $admin_username, "Type #$type_id beginning set to $beg");
-            $flash = 'Beginning stock updated.';
+            $flash = 'Beginning stock updated. Missing series rows were added.';
         } elseif ($act === 'delete_type') {
             $s = $conn->prepare("DELETE FROM voucher_types WHERE id = ?");
             $s->bind_param('i', $type_id);
@@ -222,7 +234,7 @@ function fmt_date($d) { return $d ? date('M j, Y', strtotime($d)) : ''; }
         .toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 14px; }
         .search { position: relative; }
         .search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #1b5e20; }
-        .search input { padding: 11px 14px 11px 36px; border: 1px solid #cfe3d3; border-radius: 8px; width: 280px; font-size: 14px; }
+        .search input { padding: 11px 14px 11px 38px !important; border: 1px solid #cfe3d3; border-radius: 8px; width: 280px; font-size: 14px; }
         .btn { background: #2e7d32; color: #fff; border: none; border-radius: 8px; padding: 11px 18px; font-weight: 700; cursor: pointer; font-size: 14px; }
         .btn:hover { background: #1b5e20; }
         .btn.ghost { background: #e6f4e8; color: #1b5e20; }
@@ -434,7 +446,7 @@ function fmt_date($d) { return $d ? date('M j, Y', strtotime($d)) : ''; }
             <input type="hidden" name="action" value="add_type">
             <div class="grid">
                 <div class="field full"><label>VOUCHER NAME</label><input type="text" name="name" required></div>
-                <div class="field full"><label>BEGINNING (NUMBER OF VOUCHERS)</label><input type="number" min="0" name="beginning" value="80" required></div>
+                <div class="field full"><label>BEGINNING / TOTAL VOUCHERS (creates series 1 up to this number)</label><input type="number" min="0" max="5000" name="beginning" value="80" required></div>
             </div>
             <div class="actions">
                 <button type="button" class="btn ghost" onclick="closeModal('typeModal')">Cancel</button>
