@@ -73,7 +73,60 @@ $flash = '';
 $flash_type = 'ok';
 
 // ------------------------------------------------------------
-// POST actions
+// AJAX auto-save: one field of one row at a time. Nothing here can
+// delete a row or a voucher type.
+// ------------------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'autosave') {
+    header('Content-Type: application/json; charset=utf-8');
+    $out = function ($arr, $code = 200) { http_response_code($code); echo json_encode($arr); exit(); };
+    if (!hash_equals($_SESSION['vm_token'], (string)($_POST['token'] ?? ''))) {
+        $out(['ok' => false, 'error' => 'Session expired. Reload the page.'], 403);
+    }
+    $id    = (int)($_POST['id'] ?? 0);
+    $field = (string)($_POST['field'] ?? '');
+    $raw   = trim((string)($_POST['value'] ?? ''));
+    $fields = ['date_sold' => 'date', 'date_availed' => 'date', 'customer_name' => 'upper', 'mop' => 'upper', 'remarks' => 'text', 'note' => 'text'];
+    if (!isset($fields[$field])) { $out(['ok' => false, 'error' => 'Invalid field.'], 400); }
+
+    if ($fields[$field] === 'date') {
+        $val = vm_date($raw);
+        if ($raw !== '' && $val === null) { $out(['ok' => false, 'error' => 'Invalid date.'], 400); }
+    } else {
+        $val = vm_text($raw);
+        if ($val !== null && $fields[$field] === 'upper') { $val = mb_strtoupper($val); }
+    }
+
+    $g = $conn->prepare("SELECT v.type_id, v.series_no, v.$field AS old, t.name FROM vouchers v JOIN voucher_types t ON t.id = v.type_id WHERE v.id = ?");
+    $g->bind_param('i', $id);
+    $g->execute();
+    $row = $g->get_result()->fetch_assoc();
+    if (!$row) { $out(['ok' => false, 'error' => 'Row not found.'], 404); }
+
+    $u = $conn->prepare("UPDATE vouchers SET $field = ? WHERE id = ?");
+    $u->bind_param('si', $val, $id);
+    if (!$u->execute()) { $out(['ok' => false, 'error' => 'Could not save.'], 500); }
+
+    // A voucher counts as given out as soon as it has a customer name.
+    $conn->query("UPDATE vouchers SET sold_out = IF(customer_name IS NULL OR customer_name = '', 0, 1) WHERE id = $id");
+    $so = (int)$conn->query("SELECT sold_out FROM vouchers WHERE id = $id")->fetch_row()[0];
+
+    if ((string)$row['old'] !== (string)$val) {
+        vm_log($conn, 'Voucher updated', $admin_username,
+            $row['name'] . ' series ' . str_pad((string)$row['series_no'], 3, '0', STR_PAD_LEFT) . " $field: '" . ($row['old'] ?? '') . "' -> '" . ($val ?? '') . "'");
+    }
+
+    $tid = (int)$row['type_id'];
+    $st = $conn->query("SELECT t.beginning,
+            (SELECT COUNT(*) FROM vouchers WHERE type_id = t.id AND sold_out = 1) AS total_out,
+            (SELECT COUNT(*) FROM vouchers WHERE type_id = t.id AND date_availed IS NOT NULL) AS availed
+        FROM voucher_types t WHERE t.id = $tid")->fetch_assoc();
+    $out(['ok' => true, 'value' => $val, 'sold_out' => $so,
+          'beginning' => (int)$st['beginning'], 'total_out' => (int)$st['total_out'],
+          'ending' => (int)$st['beginning'] - (int)$st['total_out'], 'availed' => (int)$st['availed']]);
+}
+
+// ------------------------------------------------------------
+// POST actions (create a voucher type / change beginning stock)
 // ------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $type_id = (int)($_POST['type_id'] ?? $type_id);
@@ -109,54 +162,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             vm_fill_series($conn, $type_id, $beg);   // adds any missing series rows up to the new beginning
             vm_log($conn, 'Voucher beginning updated', $admin_username, "Type #$type_id beginning set to $beg");
             $flash = 'Beginning stock updated. Missing series rows were added.';
-        } elseif ($act === 'delete_type') {
-            $s = $conn->prepare("DELETE FROM voucher_types WHERE id = ?");
-            $s->bind_param('i', $type_id);
-            $s->execute();
-            vm_log($conn, 'Voucher type deleted', $admin_username, "Deleted voucher type #$type_id and all its entries");
-            $type_id = 0;
-            $flash = 'Voucher type deleted.';
-        } elseif ($act === 'add' || $act === 'update') {
-            $series = (int)($_POST['series_no'] ?? 0);
-            $date   = vm_date($_POST['date_sold'] ?? '');
-            $cust   = vm_text($_POST['customer_name'] ?? '');
-            $cust   = $cust === null ? null : strtoupper($cust);
-            $mop    = vm_text($_POST['mop'] ?? '');
-            $mop    = $mop === null ? null : strtoupper($mop);
-            $rem    = vm_text($_POST['remarks'] ?? '');
-            $avail  = vm_date($_POST['date_availed'] ?? '');
-            $note   = vm_text($_POST['note'] ?? '');
-            $sold   = ($cust !== null) ? 1 : 0;
-
-            if ($series < 1) {
-                $flash = 'Series number must be 1 or higher.'; $flash_type = 'err';
-            } elseif ($act === 'add') {
-                $s = $conn->prepare("INSERT INTO vouchers (type_id, series_no, date_sold, sold_out, customer_name, mop, remarks, date_availed, note) VALUES (?,?,?,?,?,?,?,?,?)");
-                $s->bind_param('iisisssss', $type_id, $series, $date, $sold, $cust, $mop, $rem, $avail, $note);
-                if ($s->execute()) {
-                    vm_log($conn, 'Voucher added', $admin_username, "Type #$type_id series $series to " . ($cust ?? '-'));
-                    $flash = "Series $series saved.";
-                } else {
-                    $flash = "Series $series already exists in this voucher. Edit it instead."; $flash_type = 'err';
-                }
-            } else {
-                $id = (int)($_POST['id'] ?? 0);
-                $s = $conn->prepare("UPDATE vouchers SET series_no=?, date_sold=?, sold_out=?, customer_name=?, mop=?, remarks=?, date_availed=?, note=? WHERE id=? AND type_id=?");
-                $s->bind_param('isisssssii', $series, $date, $sold, $cust, $mop, $rem, $avail, $note, $id, $type_id);
-                if ($s->execute()) {
-                    vm_log($conn, 'Voucher updated', $admin_username, "Type #$type_id series $series (" . ($cust ?? '-') . ")");
-                    $flash = "Series $series updated.";
-                } else {
-                    $flash = "Series $series already exists in this voucher."; $flash_type = 'err';
-                }
-            }
-        } elseif ($act === 'delete') {
-            $id = (int)($_POST['id'] ?? 0);
-            $s = $conn->prepare("DELETE FROM vouchers WHERE id = ? AND type_id = ?");
-            $s->bind_param('ii', $id, $type_id);
-            $s->execute();
-            vm_log($conn, 'Voucher deleted', $admin_username, "Deleted voucher row #$id from type #$type_id");
-            $flash = 'Entry deleted.';
         }
     }
     // Post/Redirect/Get so a refresh doesn't resubmit
@@ -256,6 +261,15 @@ function fmt_date($d) { return $d ? date('M j, Y', strtotime($d)) : ''; }
         .flash { padding: 12px 16px; border-radius: 8px; margin-bottom: 14px; font-weight: 700; font-size: 14px; }
         .flash.ok { background: #e7f8ee; color: #1b5e20; }
         .flash.err { background: #fdeced; color: #b3202f; }
+        td input { width: 100%; box-sizing: border-box; border: 1px solid transparent; background: transparent; padding: 8px 8px; font-size: 14px; text-align: center; border-radius: 6px; font-family: inherit; }
+        td input:hover { border-color: #cfe3d3; background: #fff; }
+        td input:focus { outline: none; border-color: #2e7d32; background: #fff; box-shadow: 0 0 0 2px #c9e6cd; }
+        td input.saving { border-color: #f0b429; }
+        td input.saved { border-color: #2e7d32; background: #e7f8ee; }
+        td input.failed { border-color: #e0364a; background: #fdeced; }
+        td input[type=text] { text-align: left; min-width: 120px; }
+        .savestate { font-size: 13px; font-weight: 700; color: #5c6b5e; }
+        .savestate.err { color: #e0364a; }
         .empty { padding: 40px; text-align: center; color: #5c6b5e; }
 
         .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 50; align-items: center; justify-content: center; }
@@ -270,9 +284,7 @@ function fmt_date($d) { return $d ? date('M j, Y', strtotime($d)) : ''; }
         /* assets/style.css forces every <button> green with !important; re-assert the variants used here */
         .main-content .linkbtn { background: none !important; color: #1b5e20 !important; box-shadow: none !important; padding: 2px 4px !important; font-size: 12px !important; text-decoration: underline; transform: none !important; }
         .main-content .btn.ghost, .modal .btn.ghost { background: #e6f4e8 !important; color: #1b5e20 !important; }
-        .main-content .icon-btn { background: #d3ebd7 !important; color: #1b5e20 !important; width: 30px; height: 30px; padding: 0 !important; box-shadow: none !important; }
-        .main-content .icon-btn.del { background: #fdeced !important; color: #e0364a !important; }
-        .main-content .tab.add { background: transparent !important; color: #1b5e20 !important; border: 1px dashed #1b5e20 !important; box-shadow: none !important; padding: 9px 16px !important; }
+                .main-content .tab.add { background: transparent !important; color: #1b5e20 !important; border: 1px dashed #1b5e20 !important; box-shadow: none !important; padding: 9px 16px !important; }
         @media (max-width: 640px) { .main-content { margin-left: 0; } .sidebar { display: none; } .grid { grid-template-columns: 1fr; } }
     </style>
     <link rel="stylesheet" href="assets/style.css">
@@ -320,22 +332,22 @@ function fmt_date($d) { return $d ? date('M j, Y', strtotime($d)) : ''; }
     <div class="summary">
         <div class="summary-item">
             <h2>BEGINNING</h2>
-            <p><?= $beginning ?></p>
+            <p id="c_beg"><?= $beginning ?></p>
             <small><button class="linkbtn" onclick="openModal('begModal')">Change</button></small>
         </div>
         <div class="summary-item">
             <h2>TOTAL OUT</h2>
-            <p><?= $total_out ?></p>
+            <p id="c_out"><?= $total_out ?></p>
             <small>vouchers given to customers</small>
         </div>
-        <div class="summary-item <?= $ending < 0 ? 'neg' : '' ?>">
+        <div class="summary-item <?= $ending < 0 ? 'neg' : '' ?>" id="endCard">
             <h2>ENDING</h2>
-            <p><?= $ending ?></p>
-            <small><?= $ending < 0 ? 'Over the beginning stock' : 'still available' ?></small>
+            <p id="c_end"><?= $ending ?></p>
+            <small id="endNote"><?= $ending < 0 ? 'Over the beginning stock' : 'still available' ?></small>
         </div>
         <div class="summary-item">
             <h2>AVAILED</h2>
-            <p><?= $availed ?></p>
+            <p id="c_av"><?= $availed ?></p>
             <small>with a date availed</small>
         </div>
     </div>
@@ -344,13 +356,7 @@ function fmt_date($d) { return $d ? date('M j, Y', strtotime($d)) : ''; }
         <div class="search"><i class="fas fa-search"></i><input type="text" id="q" placeholder="Search this table..." oninput="filterRows()"></div>
         <label style="font-size:13px;font-weight:700;color:#1b5e20;"><input type="checkbox" id="onlyOut" onchange="filterRows()"> Show given out only</label>
         <div class="spacer"></div>
-        <button class="btn" onclick="openAdd()"><i class="fas fa-plus"></i> Add entry</button>
-        <button class="btn ghost" onclick="if(confirm('Delete this voucher type and ALL its entries?')) document.getElementById('delTypeForm').submit();"><i class="fas fa-trash"></i> Delete voucher</button>
-        <form id="delTypeForm" method="POST" style="display:none">
-            <input type="hidden" name="token" value="<?= h($_SESSION['vm_token']) ?>">
-            <input type="hidden" name="action" value="delete_type">
-            <input type="hidden" name="type_id" value="<?= $type_id ?>">
-        </form>
+        <span id="saveState" class="savestate">All changes save automatically</span>
     </div>
 
     <div class="table-wrap">
@@ -358,68 +364,29 @@ function fmt_date($d) { return $d ? date('M j, Y', strtotime($d)) : ''; }
             <thead>
                 <tr>
                     <th>DATE</th><th>SOLD OUT</th><th>SERIES NO.</th><th>CUSTOMER NAME</th>
-                    <th>MODE OF PAYMENT</th><th>REMARKS (SPONSORSHIP OR SOLD)</th><th>DATE AVAILED</th><th>NOTE (C/O ACCTNG)</th><th></th>
+                    <th>MODE OF PAYMENT</th><th>REMARKS (SPONSORSHIP OR SOLD)</th><th>DATE AVAILED</th><th>NOTE (C/O ACCTNG)</th>
                 </tr>
             </thead>
             <tbody>
-            <?php foreach ($rows as $r): ?>
-                <tr class="<?= $r['sold_out'] ? 'out' : 'free' ?>"
-                    data-row='<?= h(json_encode($r)) ?>'>
-                    <td><?= h(fmt_date($r['date_sold'])) ?></td>
+            <?php foreach ($rows as $r): $rid = (int)$r['id']; ?>
+                <tr class="<?= $r['sold_out'] ? 'out' : 'free' ?>" data-id="<?= $rid ?>">
+                    <td><input type="date" data-f="date_sold" value="<?= h($r['date_sold']) ?>"></td>
                     <td><span class="pill <?= $r['sold_out'] ? 'out' : 'free' ?>"><?= $r['sold_out'] ? 'OUT' : 'IN STOCK' ?></span></td>
                     <td><b><?= str_pad((string)$r['series_no'], 3, '0', STR_PAD_LEFT) ?></b></td>
-                    <td class="left"><?= h($r['customer_name']) ?></td>
-                    <td><?= h($r['mop']) ?></td>
-                    <td class="left"><?= h($r['remarks']) ?></td>
-                    <td><?= h(fmt_date($r['date_availed'])) ?></td>
-                    <td class="left"><?= h($r['note']) ?></td>
-                    <td style="white-space:nowrap">
-                        <button class="icon-btn" title="Edit" onclick="openEdit(this.closest('tr'))"><i class="fas fa-pen"></i></button>
-                        <button class="icon-btn del" title="Delete" onclick="delRow(<?= (int)$r['id'] ?>, <?= (int)$r['series_no'] ?>)"><i class="fas fa-trash"></i></button>
-                    </td>
+                    <td><input type="text" data-f="customer_name" value="<?= h($r['customer_name']) ?>" autocomplete="off"></td>
+                    <td><input type="text" data-f="mop" list="mopList" value="<?= h($r['mop']) ?>" autocomplete="off"></td>
+                    <td><input type="text" data-f="remarks" list="remList" value="<?= h($r['remarks']) ?>" autocomplete="off"></td>
+                    <td><input type="date" data-f="date_availed" value="<?= h($r['date_availed']) ?>"></td>
+                    <td><input type="text" data-f="note" value="<?= h($r['note']) ?>" autocomplete="off"></td>
                 </tr>
             <?php endforeach; ?>
             </tbody>
         </table>
-        <?php if (!$rows): ?><div class="empty">No entries yet for this voucher. Click <b>Add entry</b>.</div><?php endif; ?>
+        <?php if (!$rows): ?><div class="empty">No series rows yet. Click <b>Change</b> under Beginning and enter the number of vouchers.</div><?php endif; ?>
     </div>
 
-    <form id="delForm" method="POST" style="display:none">
-        <input type="hidden" name="token" value="<?= h($_SESSION['vm_token']) ?>">
-        <input type="hidden" name="action" value="delete">
-        <input type="hidden" name="type_id" value="<?= $type_id ?>">
-        <input type="hidden" name="id" id="delId">
-    </form>
-
-    <!-- Add / edit entry -->
-    <div class="modal-bg" id="entryModal">
-        <form class="modal" method="POST">
-            <h2 id="entryTitle">Add entry</h2>
-            <input type="hidden" name="token" value="<?= h($_SESSION['vm_token']) ?>">
-            <input type="hidden" name="type_id" value="<?= $type_id ?>">
-            <input type="hidden" name="action" id="f_action" value="add">
-            <input type="hidden" name="id" id="f_id" value="">
-            <div class="grid">
-                <div class="field"><label>SERIES NO.</label><input type="number" min="1" name="series_no" id="f_series" required></div>
-                <div class="field"><label>DATE</label><input type="date" name="date_sold" id="f_date"></div>
-                <div class="field full"><label>CUSTOMER NAME (leave empty if not given out)</label><input type="text" name="customer_name" id="f_cust"></div>
-                <div class="field"><label>MODE OF PAYMENT</label>
-                    <input type="text" name="mop" id="f_mop" list="mopList">
-                    <datalist id="mopList"><option value="CASH"><option value="CHEQUE"><option value="CARD"><option value="GCASH"><option value="BANK TRANSFER"></datalist>
-                </div>
-                <div class="field"><label>REMARKS (SPONSORSHIP OR SOLD)</label>
-                    <input type="text" name="remarks" id="f_rem" list="remList">
-                    <datalist id="remList"><option value="SPONSORSHIP"><option value="SOLD"></datalist>
-                </div>
-                <div class="field"><label>DATE AVAILED</label><input type="date" name="date_availed" id="f_avail"></div>
-                <div class="field"><label>NOTE (C/O ACCTNG)</label><input type="text" name="note" id="f_note"></div>
-            </div>
-            <div class="actions">
-                <button type="button" class="btn ghost" onclick="closeModal('entryModal')">Cancel</button>
-                <button class="btn">Save</button>
-            </div>
-        </form>
-    </div>
+    <datalist id="mopList"><option value="CASH"><option value="CHEQUE"><option value="CARD"><option value="GCASH"><option value="BANK TRANSFER"></datalist>
+    <datalist id="remList"><option value="SPONSORSHIP"><option value="SOLD"></datalist>
 
     <!-- Beginning stock -->
     <div class="modal-bg" id="begModal">
@@ -457,43 +424,62 @@ function fmt_date($d) { return $d ? date('M j, Y', strtotime($d)) : ''; }
 </div>
 
 <script>
-const NEXT_SERIES = <?= (int)$next_series ?>;
 function openModal(id){ document.getElementById(id).classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 document.querySelectorAll('.modal-bg').forEach(m => m.addEventListener('mousedown', e => { if (e.target === m) m.classList.remove('open'); }));
 
-function setForm(r){
-    document.getElementById('f_id').value     = r.id || '';
-    document.getElementById('f_series').value = r.series_no || '';
-    document.getElementById('f_date').value   = r.date_sold || '';
-    document.getElementById('f_cust').value   = r.customer_name || '';
-    document.getElementById('f_mop').value    = r.mop || '';
-    document.getElementById('f_rem').value    = r.remarks || '';
-    document.getElementById('f_avail').value  = r.date_availed || '';
-    document.getElementById('f_note').value   = r.note || '';
+const TOKEN = <?= json_encode($_SESSION['vm_token']) ?>;
+const saveState = document.getElementById('saveState');
+const timers = new WeakMap();
+
+function setState(msg, err){ if (saveState){ saveState.textContent = msg; saveState.classList.toggle('err', !!err); } }
+
+function saveField(inp){
+    const tr = inp.closest('tr');
+    const fd = new URLSearchParams({action:'autosave', token:TOKEN, id:tr.dataset.id, field:inp.dataset.f, value:inp.value});
+    inp.classList.remove('saved','failed'); inp.classList.add('saving');
+    setState('Saving...');
+    fetch('voucher_monitoring.php', {method:'POST', body:fd, headers:{'Content-Type':'application/x-www-form-urlencoded'}})
+      .then(r => r.json().then(j => ({ok:r.ok && j.ok, j})))
+      .then(({ok, j}) => {
+        inp.classList.remove('saving');
+        if (!ok) throw new Error(j.error || 'Could not save');
+        if (inp.dataset.f === 'customer_name' || inp.dataset.f === 'mop') { inp.value = j.value || ''; }
+        inp.dataset.last = inp.value;
+        inp.classList.add('saved'); setTimeout(() => inp.classList.remove('saved'), 1200);
+        tr.classList.toggle('out', j.sold_out === 1); tr.classList.toggle('free', j.sold_out !== 1);
+        const pill = tr.querySelector('.pill');
+        pill.className = 'pill ' + (j.sold_out ? 'out' : 'free'); pill.textContent = j.sold_out ? 'OUT' : 'IN STOCK';
+        document.getElementById('c_beg').textContent = j.beginning;
+        document.getElementById('c_out').textContent = j.total_out;
+        document.getElementById('c_end').textContent = j.ending;
+        document.getElementById('c_av').textContent = j.availed;
+        document.getElementById('endCard').classList.toggle('neg', j.ending < 0);
+        document.getElementById('endNote').textContent = j.ending < 0 ? 'Over the beginning stock' : 'still available';
+        setState('All changes saved');
+      })
+      .catch(e => { inp.classList.remove('saving'); inp.classList.add('failed'); setState('Not saved: ' + e.message, true); });
 }
-function openAdd(){
-    setForm({series_no: NEXT_SERIES, date_sold: new Date().toISOString().slice(0,10)});
-    document.getElementById('f_action').value = 'add';
-    document.getElementById('entryTitle').textContent = 'Add entry';
-    openModal('entryModal');
-}
-function openEdit(tr){
-    setForm(JSON.parse(tr.dataset.row));
-    document.getElementById('f_action').value = 'update';
-    document.getElementById('entryTitle').textContent = 'Edit entry';
-    openModal('entryModal');
-}
-function delRow(id, series){
-    if (!confirm('Delete series ' + series + '?')) return;
-    document.getElementById('delId').value = id;
-    document.getElementById('delForm').submit();
-}
+
+document.querySelectorAll('#vt tbody input').forEach(inp => {
+    inp.dataset.last = inp.value;
+    const go = () => { if (inp.value !== inp.dataset.last) saveField(inp); };
+    inp.addEventListener('change', go);                       // dates, datalist picks, leaving the cell
+    inp.addEventListener('blur', go);
+    inp.addEventListener('input', () => {                     // typing: save shortly after you stop
+        if (inp.type === 'date') return;
+        clearTimeout(timers.get(inp)); timers.set(inp, setTimeout(go, 700));
+    });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); inp.blur(); } });
+});
+window.addEventListener('beforeunload', e => { if (document.querySelector('#vt input.saving')) { e.preventDefault(); e.returnValue = ''; } });
+
 function filterRows(){
     const q = document.getElementById('q').value.toLowerCase();
     const only = document.getElementById('onlyOut').checked;
     document.querySelectorAll('#vt tbody tr').forEach(tr => {
-        const ok = tr.textContent.toLowerCase().includes(q) && (!only || tr.classList.contains('out'));
+        const txt = Array.from(tr.querySelectorAll('input')).map(i => i.value).join(' ') + ' ' + tr.textContent;
+        const ok = txt.toLowerCase().includes(q) && (!only || tr.classList.contains('out'));
         tr.style.display = ok ? '' : 'none';
     });
 }
