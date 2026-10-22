@@ -246,9 +246,9 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         .btn.danger { background: #e0364a; }
         .spacer { flex: 1; }
 
-        .table-wrap { background: #fff; border-radius: 12px; overflow: auto; max-height: 62vh; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+        .table-wrap { background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
         table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        th { position: sticky; top: 0; background: #1b5e20; color: #fff; padding: 12px 10px; font-size: 12px; letter-spacing: .5px; text-align: center; }
+        th { position: sticky; top: 0; z-index: 5; background: #1b5e20; color: #fff; padding: 12px 10px; font-size: 12px; letter-spacing: .5px; text-align: center; }
         td { padding: 10px; border-bottom: 1px solid #e3efe5; text-align: center; }
         tbody tr:nth-child(even) { background: #f3faf4; }
         tbody tr.free td { color: #8a978c; }
@@ -273,6 +273,21 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         .dwrap input[data-date] { padding-right: 30px; text-align: center; }
         .dwrap .hid { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; padding: 0; border: 0; }
         .main-content .dwrap .cal { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: none !important; color: #2e7d32 !important; box-shadow: none !important; padding: 4px !important; font-size: 13px !important; }
+        /* custom dropdown for Mode of Payment / Remarks */
+        td input[data-opts] { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%232e7d32' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 26px !important; }
+        .vm-menu { position: fixed; z-index: 1000; min-width: 190px; max-height: 280px; overflow-y: auto; background: #fff; border: 1px solid #cfe3d3; border-radius: 12px; box-shadow: 0 12px 32px rgba(20,54,28,.22); padding: 6px; display: none; font-family: Arial, sans-serif; text-transform: none; }
+        .vm-menu.open { display: block; animation: vmIn .12s ease-out; }
+        @keyframes vmIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+        .vm-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; font-size: 13.5px; font-weight: 700; color: #1b3a22; cursor: pointer; letter-spacing: .2px; }
+        .vm-item::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #c9e6cd; flex: none; }
+        .vm-item.active, .vm-item:hover { background: #e6f4e8; color: #1b5e20; }
+        .vm-item.active::before, .vm-item:hover::before { background: #2e7d32; }
+        .vm-item.selected { background: #2e7d32; color: #fff; }
+        .vm-item.selected::before { background: #fff; }
+        .vm-item.clear { color: #b3202f; font-weight: 600; margin-top: 4px; border-top: 1px solid #e3efe5; border-radius: 0 0 8px 8px; }
+        .vm-item.clear::before { background: #f3c1c6; }
+        .vm-item.clear:hover { background: #fdeced; color: #b3202f; }
+        .vm-item.clear:hover::before { background: #e0364a; }
         .savestate { font-size: 13px; font-weight: 700; color: #5c6b5e; }
         .savestate.err { color: #e0364a; }
         .empty { padding: 40px; text-align: center; color: #5c6b5e; }
@@ -290,6 +305,19 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         .main-content .linkbtn { background: none !important; color: #1b5e20 !important; box-shadow: none !important; padding: 2px 4px !important; font-size: 12px !important; text-decoration: underline; transform: none !important; }
         .main-content .btn.ghost, .modal .btn.ghost { background: #e6f4e8 !important; color: #1b5e20 !important; }
                 .main-content .tab.add { background: transparent !important; color: #1b5e20 !important; border: 1px dashed #1b5e20 !important; box-shadow: none !important; padding: 9px 16px !important; }
+        /* assets/style.css puts overflow:hidden on every <table>, which stops sticky headers from working.
+           Undo it here so the dark green header row stays visible while scrolling. */
+        .main-content #vt { overflow: visible !important; border: none !important; border-radius: 0 !important; }
+        .main-content #vt thead, .main-content #vt thead tr, .main-content #vt th { position: sticky; top: 0; z-index: 5; background: #1b5e20 !important; box-shadow: 0 2px 4px rgba(0,0,0,.18); }
+        .main-content #vt th:first-child { border-top-left-radius: 12px; }
+        .main-content #vt th:last-child  { border-top-right-radius: 12px; }
+        .main-content #vt thead, .main-content #vt thead tr { position: static; box-shadow: none; }
+
+        /* search box: icon sits inside the box, text starts after it */
+        .main-content .search { position: relative; display: inline-block; }
+        .main-content .search input[type="text"] { padding: 11px 14px 11px 42px !important; height: 44px; box-sizing: border-box; width: 300px; border: 1px solid #cfe3d3 !important; border-radius: 10px !important; background: #fff !important; }
+        .main-content .search input[type="text"]:focus { outline: none; border-color: #2e7d32 !important; box-shadow: 0 0 0 3px #c9e6cd; }
+        .main-content .search i { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); font-size: 15px; color: #2e7d32; pointer-events: none; }
         @media (max-width: 640px) { .main-content { margin-left: 0; } .sidebar { display: none; } .grid { grid-template-columns: 1fr; } }
     </style>
     <link rel="stylesheet" href="assets/style.css">
@@ -379,8 +407,8 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
                     <td><span class="pill <?= $r['sold_out'] ? 'out' : 'free' ?>"><?= $r['sold_out'] ? 'OUT' : 'IN STOCK' ?></span></td>
                     <td><b><?= str_pad((string)$r['series_no'], 3, '0', STR_PAD_LEFT) ?></b></td>
                     <td><input type="text" data-f="customer_name" value="<?= h($r['customer_name']) ?>" autocomplete="off"></td>
-                    <td><input type="text" data-f="mop" list="mopList" value="<?= h($r['mop']) ?>" autocomplete="off"></td>
-                    <td><input type="text" data-f="remarks" list="remList" value="<?= h($r['remarks']) ?>" autocomplete="off"></td>
+                    <td><input type="text" data-f="mop" data-opts="mop" value="<?= h($r['mop']) ?>" autocomplete="off"></td>
+                    <td><input type="text" data-f="remarks" data-opts="remarks" value="<?= h($r['remarks']) ?>" autocomplete="off"></td>
                     <td class="dcell"><div class="dwrap"><input type="text" data-f="date_availed" data-date="1" data-iso="<?= h($r['date_availed']) ?>" value="<?= h(fmt_date($r['date_availed'])) ?>" placeholder="Pick a date" autocomplete="off"><button type="button" class="cal" tabindex="-1" title="Pick from calendar"><i class="fas fa-calendar-alt"></i></button><input type="date" class="hid" tabindex="-1" value="<?= h($r['date_availed']) ?>"></div></td>
                     <td><input type="text" data-f="note" value="<?= h($r['note']) ?>" autocomplete="off"></td>
                 </tr>
@@ -389,9 +417,6 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         </table>
         <?php if (!$rows): ?><div class="empty">No series rows yet. Click <b>Change</b> under Beginning and enter the number of vouchers.</div><?php endif; ?>
     </div>
-
-    <datalist id="mopList"><option value="CASH"><option value="CHEQUE"><option value="CARD"><option value="GCASH"><option value="BANK TRANSFER"></datalist>
-    <datalist id="remList"><option value="SPONSORSHIP"><option value="SOLD"></datalist>
 
     <!-- Beginning stock -->
     <div class="modal-bg" id="begModal">
@@ -540,6 +565,73 @@ document.querySelectorAll('#vt tbody input[data-f]').forEach(inp => {
         pick.addEventListener('change', () => { inp.value = longDate(pick.value); fit(inp); go(); });
     }
 });
+// ---------- styled dropdown (replaces the plain browser list) ----------
+const OPTIONS = {
+    mop: ['CASH', 'CHEQUE', 'CARD', 'GCASH', 'BANK TRANSFER'],
+    remarks: ['SPONSORSHIP', 'SOLD']
+};
+const menu = document.createElement('div');
+menu.className = 'vm-menu';
+document.body.appendChild(menu);
+let menuInput = null, menuIdx = -1;
+
+function menuItems(){ return Array.from(menu.querySelectorAll('.vm-item')); }
+function closeMenu(){ menu.classList.remove('open'); menuInput = null; menuIdx = -1; }
+function setActive(i){
+    const items = menuItems();
+    items.forEach(x => x.classList.remove('active'));
+    menuIdx = items.length ? (i + items.length) % items.length : -1;
+    if (menuIdx >= 0) { items[menuIdx].classList.add('active'); items[menuIdx].scrollIntoView({block:'nearest'}); }
+}
+function choose(inp, v){
+    inp.value = v; fit(inp);
+    inp.dispatchEvent(new Event('change'));
+    closeMenu();
+}
+function openMenu(inp, showAll){
+    const all = OPTIONS[inp.dataset.opts] || [];
+    const q = inp.value.trim().toUpperCase();
+    const list = (showAll || q === '') ? all : all.filter(o => o.includes(q));
+    menu.innerHTML = '';
+    list.forEach(o => {
+        const d = document.createElement('div');
+        d.className = 'vm-item' + (o === inp.value.trim().toUpperCase() ? ' selected' : '');
+        d.textContent = o;
+        d.addEventListener('mousedown', e => { e.preventDefault(); choose(inp, o); });
+        menu.appendChild(d);
+    });
+    if (inp.value.trim() !== '') {
+        const c = document.createElement('div');
+        c.className = 'vm-item clear'; c.textContent = 'Clear';
+        c.addEventListener('mousedown', e => { e.preventDefault(); choose(inp, ''); });
+        menu.appendChild(c);
+    }
+    if (!menu.children.length) { closeMenu(); return; }
+    const r = inp.getBoundingClientRect();
+    const h = Math.min(280, menu.children.length * 42 + 16);
+    const below = window.innerHeight - r.bottom > h + 12;
+    menu.style.minWidth = Math.max(190, r.width) + 'px';
+    menu.style.left = Math.min(r.left, window.innerWidth - 210) + 'px';
+    menu.style.top = (below ? r.bottom + 6 : Math.max(8, r.top - h - 6)) + 'px';
+    menu.classList.add('open');
+    menuInput = inp; setActive(-1);
+}
+document.querySelectorAll('#vt tbody input[data-opts]').forEach(inp => {
+    inp.addEventListener('focus', () => openMenu(inp, true));
+    inp.addEventListener('click', () => openMenu(inp, true));
+    inp.addEventListener('input', () => openMenu(inp, false));
+    inp.addEventListener('blur', () => setTimeout(() => { if (menuInput === inp) closeMenu(); }, 0));
+    inp.addEventListener('keydown', e => {
+        if (!menu.classList.contains('open') || menuInput !== inp) { if (e.key === 'ArrowDown') { openMenu(inp, true); e.preventDefault(); } return; }
+        if (e.key === 'ArrowDown') { setActive(menuIdx + 1); e.preventDefault(); }
+        else if (e.key === 'ArrowUp') { setActive(menuIdx - 1); e.preventDefault(); }
+        else if (e.key === 'Escape') { closeMenu(); }
+        else if (e.key === 'Enter' && menuIdx >= 0) { e.preventDefault(); e.stopImmediatePropagation(); menuItems()[menuIdx].dispatchEvent(new MouseEvent('mousedown', {cancelable:true})); inp.blur(); }
+    }, true);
+});
+window.addEventListener('scroll', closeMenu, true);
+window.addEventListener('resize', closeMenu);
+
 window.addEventListener('beforeunload', e => { if (document.querySelector('#vt input.saving')) { e.preventDefault(); e.returnValue = ''; } });
 
 function filterRows(){
