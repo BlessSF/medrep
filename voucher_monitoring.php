@@ -230,28 +230,29 @@ if ($cur) {
     $total_rows = (int)$conn->query("SELECT COUNT(*) FROM vouchers WHERE type_id = " . (int)$type_id)->fetch_row()[0];
     $availed    = (int)$conn->query("SELECT COUNT(*) FROM vouchers WHERE type_id = " . (int)$type_id . " AND date_availed IS NOT NULL")->fetch_row()[0];
 
-    $where = "type_id = ?"; $types_s = 'i'; $params = [$type_id];
+    // Build the filter with escaped values (no bind_param, so a bad query can never fatal the page).
+    $where = "type_id = " . (int)$type_id;
     if ($only_out) $where .= " AND sold_out = 1";
     if ($q !== '') {
-        $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q) . '%';
-        $where .= " AND (LPAD(series_no,3,'0') LIKE ? OR customer_name LIKE ? OR redeemed_by LIKE ? OR mop LIKE ? OR remarks LIKE ? OR note LIKE ? OR CAST(date_sold AS CHAR) LIKE ? OR CAST(date_availed AS CHAR) LIKE ?)";
-        for ($i = 0; $i < 8; $i++) { $types_s .= 's'; $params[] = $like; }
+        if (ctype_digit($q)) {
+            // A number finds that exact series number (001, 1, 0001 all match series 1).
+            $where .= " AND series_no = " . (int)$q;
+        } else {
+            $esc = $conn->real_escape_string(str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q));
+            $like = "'%" . $esc . "%'";
+            $where .= " AND (customer_name LIKE $like OR redeemed_by LIKE $like OR mop LIKE $like OR remarks LIKE $like OR note LIKE $like)";
+        }
     }
 
-    $c = $conn->prepare("SELECT COUNT(*) FROM vouchers WHERE $where");
-    $c->bind_param($types_s, ...$params);
-    $c->execute();
-    $match_rows = (int)$c->get_result()->fetch_row()[0];
+    $cr = $conn->query("SELECT COUNT(*) FROM vouchers WHERE $where");
+    $match_rows = $cr ? (int)$cr->fetch_row()[0] : 0;
 
     $pages = max(1, (int)ceil($match_rows / $per));
     if ($pg > $pages) $pg = $pages;
     $offset = ($pg - 1) * $per;
 
-    $s = $conn->prepare("SELECT id, series_no, date_sold, sold_out, customer_name, redeemed_by, mop, remarks, date_availed, note FROM vouchers WHERE $where ORDER BY series_no LIMIT $per OFFSET $offset");
-    $s->bind_param($types_s, ...$params);
-    $s->execute();
-    $res = $s->get_result();
-    while ($r = $res->fetch_assoc()) { $rows[] = $r; }
+    $res = $conn->query("SELECT id, series_no, date_sold, sold_out, customer_name, redeemed_by, mop, remarks, date_availed, note FROM vouchers WHERE $where ORDER BY series_no LIMIT $per OFFSET $offset");
+    if ($res) { while ($r = $res->fetch_assoc()) { $rows[] = $r; } }
 }
 $pages = $pages ?? 1;
 $beginning = $cur ? (int)$cur['beginning'] : 0;
@@ -515,7 +516,7 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
     </div>
 
     <div class="toolbar">
-        <div class="search"><i class="fas fa-search"></i><input type="text" id="q" value="<?= h($q) ?>" placeholder="Search this table..." autocomplete="off" oninput="searchSoon()" onkeydown="if(event.key==='Enter'){event.preventDefault();applyFilters();}"></div>
+        <div class="search"><i class="fas fa-search"></i><input type="text" id="q" value="<?= h($q) ?>" placeholder="Search series no., name, note..." autocomplete="off" oninput="searchSoon()" onkeydown="if(event.key==='Enter'){event.preventDefault();applyFilters();}"></div>
         <label style="font-size:13px;font-weight:700;color:#1b5e20;"><input type="checkbox" id="onlyOut" <?= $only_out ? 'checked' : '' ?> onchange="applyFilters()"> Show given out only</label>
         <label class="perpage">Show
             <select id="perSel" onchange="applyFilters()">
