@@ -214,20 +214,49 @@ if (!isset($types[$type_id])) {
 }
 $cur = $type_id ? $types[$type_id] : null;
 
+// ---- Paging / filtering (done in SQL so only one page of rows is ever loaded) ----
+$per_opts = [20, 50, 80];
+$per      = (int)($_GET['per'] ?? 20);
+if (!in_array($per, $per_opts, true)) $per = 20;
+$q        = trim((string)($_GET['q'] ?? ''));
+$only_out = !empty($_GET['out']);
+$pg       = max(1, (int)($_GET['pg'] ?? 1));
+
 $rows = [];
-$next_series = 1;
+$total_rows = 0;      // every series row of this voucher (ignores search/filter)
+$match_rows = 0;      // rows matching the current search/filter
+$availed    = 0;
 if ($cur) {
-    $s = $conn->prepare("SELECT id, series_no, date_sold, sold_out, customer_name, redeemed_by, mop, remarks, date_availed, note FROM vouchers WHERE type_id = ? ORDER BY series_no");
-    $s->bind_param('i', $type_id);
+    $total_rows = (int)$conn->query("SELECT COUNT(*) FROM vouchers WHERE type_id = " . (int)$type_id)->fetch_row()[0];
+    $availed    = (int)$conn->query("SELECT COUNT(*) FROM vouchers WHERE type_id = " . (int)$type_id . " AND date_availed IS NOT NULL")->fetch_row()[0];
+
+    $where = "type_id = ?"; $types_s = 'i'; $params = [$type_id];
+    if ($only_out) $where .= " AND sold_out = 1";
+    if ($q !== '') {
+        $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $q) . '%';
+        $where .= " AND (LPAD(series_no,3,'0') LIKE ? OR customer_name LIKE ? OR redeemed_by LIKE ? OR mop LIKE ? OR remarks LIKE ? OR note LIKE ? OR CAST(date_sold AS CHAR) LIKE ? OR CAST(date_availed AS CHAR) LIKE ?)";
+        for ($i = 0; $i < 8; $i++) { $types_s .= 's'; $params[] = $like; }
+    }
+
+    $c = $conn->prepare("SELECT COUNT(*) FROM vouchers WHERE $where");
+    $c->bind_param($types_s, ...$params);
+    $c->execute();
+    $match_rows = (int)$c->get_result()->fetch_row()[0];
+
+    $pages = max(1, (int)ceil($match_rows / $per));
+    if ($pg > $pages) $pg = $pages;
+    $offset = ($pg - 1) * $per;
+
+    $s = $conn->prepare("SELECT id, series_no, date_sold, sold_out, customer_name, redeemed_by, mop, remarks, date_availed, note FROM vouchers WHERE $where ORDER BY series_no LIMIT $per OFFSET $offset");
+    $s->bind_param($types_s, ...$params);
     $s->execute();
     $res = $s->get_result();
-    while ($r = $res->fetch_assoc()) { $rows[] = $r; $next_series = $r['series_no'] + 1; }
+    while ($r = $res->fetch_assoc()) { $rows[] = $r; }
 }
+$pages = $pages ?? 1;
 $beginning = $cur ? (int)$cur['beginning'] : 0;
 $total_out = $cur ? (int)$cur['total_out'] : 0;
 $ending    = $beginning - $total_out;
-$availed   = 0;
-foreach ($rows as $r) { if ($r['date_availed']) $availed++; }
 
 function h($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
@@ -356,6 +385,15 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         .modal .btn.rmgo { background: #e0364a !important; color: #fff !important; }
         .modal .btn.rmgo:hover { background: #c62839 !important; }
         .modal .btn.rmgo:disabled { background: #f1b9bf !important; cursor: not-allowed; transform: none; }
+        .perpage { font-size: 13px; font-weight: 700; color: #1b5e20; display: inline-flex; align-items: center; gap: 6px; }
+        .perpage select { padding: 8px 10px; border: 1px solid #cfe3d3; border-radius: 8px; font-size: 14px; font-weight: 700; color: #1b5e20; background: #fff; }
+        .pager { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin: 14px 0 6px; font-size: 13px; color: #1b5e20; }
+        .pbtns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .pbtns button { padding: 8px 14px; border: 1px solid #2e7d32; border-radius: 8px; background: #fff; color: #1b5e20; font-weight: 700; cursor: pointer; }
+        .pbtns button:hover:not(:disabled) { background: #e6f4e8; }
+        .pbtns button:disabled { opacity: .4; cursor: default; }
+        .pcur { font-weight: 700; padding: 0 6px; }
+        .pcur input { width: 60px; padding: 7px; border: 1px solid #cfe3d3; border-radius: 8px; text-align: center; font-size: 14px; }
         .savestate { font-size: 13px; font-weight: 700; color: #5c6b5e; }
         .savestate.err { color: #e0364a; }
         .empty { padding: 40px; text-align: center; color: #5c6b5e; }
@@ -477,8 +515,13 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
     </div>
 
     <div class="toolbar">
-        <div class="search"><i class="fas fa-search"></i><input type="text" id="q" placeholder="Search this table..." oninput="filterRows()"></div>
-        <label style="font-size:13px;font-weight:700;color:#1b5e20;"><input type="checkbox" id="onlyOut" onchange="filterRows()"> Show given out only</label>
+        <div class="search"><i class="fas fa-search"></i><input type="text" id="q" value="<?= h($q) ?>" placeholder="Search this table..." autocomplete="off" oninput="searchSoon()" onkeydown="if(event.key==='Enter'){event.preventDefault();applyFilters();}"></div>
+        <label style="font-size:13px;font-weight:700;color:#1b5e20;"><input type="checkbox" id="onlyOut" <?= $only_out ? 'checked' : '' ?> onchange="applyFilters()"> Show given out only</label>
+        <label class="perpage">Show
+            <select id="perSel" onchange="applyFilters()">
+                <?php foreach ($per_opts as $o): ?><option value="<?= $o ?>" <?= $o === $per ? 'selected' : '' ?>><?= $o ?></option><?php endforeach; ?>
+            </select> rows
+        </label>
         <div class="spacer"></div>
         <a class="btn exportbtn" href="voucher_export.php" title="Download every voucher as its own sheet in one Excel file"><i class="fas fa-file-excel"></i> Export to Excel</a>
         <button type="button" class="btn removebtn" onclick="openModal('rmModal')"><i class="fas fa-trash-alt"></i> Remove voucher</button>
@@ -509,8 +552,22 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
             <?php endforeach; ?>
             </tbody>
         </table>
-        <?php if (!$rows): ?><div class="empty">No series rows yet. Click <b>Change</b> under Beginning and enter the number of vouchers.</div><?php endif; ?>
+        <?php if (!$rows && !$total_rows): ?><div class="empty">No series rows yet. Click <b>Change</b> under Beginning and enter the number of vouchers.</div>
+        <?php elseif (!$rows): ?><div class="empty">No vouchers match your search.</div><?php endif; ?>
     </div>
+
+    <?php if ($total_rows): $from = $match_rows ? $offset + 1 : 0; $to = $offset + count($rows); ?>
+    <div class="pager">
+        <span class="pinfo">Showing <b><?= $from ?>–<?= $to ?></b> of <b><?= $match_rows ?></b><?= $match_rows !== $total_rows ? " (filtered from $total_rows)" : '' ?></span>
+        <div class="pbtns">
+            <button type="button" onclick="goPage(1)" <?= $pg <= 1 ? 'disabled' : '' ?> title="First">&laquo;</button>
+            <button type="button" onclick="goPage(<?= $pg - 1 ?>)" <?= $pg <= 1 ? 'disabled' : '' ?>>&lsaquo; Prev</button>
+            <span class="pcur">Page <input type="number" id="pgIn" min="1" max="<?= $pages ?>" value="<?= $pg ?>" onkeydown="if(event.key==='Enter'){goPage(this.value);}"> of <?= $pages ?></span>
+            <button type="button" onclick="goPage(<?= $pg + 1 ?>)" <?= $pg >= $pages ? 'disabled' : '' ?>>Next &rsaquo;</button>
+            <button type="button" onclick="goPage(<?= $pages ?>)" <?= $pg >= $pages ? 'disabled' : '' ?> title="Last">&raquo;</button>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- Remove voucher -->
     <div class="modal-bg" id="rmModal">
@@ -518,7 +575,7 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
             <div class="rm-icon"><i class="fas fa-exclamation-triangle"></i></div>
             <h2 style="text-align:center">Remove this voucher?</h2>
             <p class="rm-text">You are about to permanently remove <b><?= h($cur['name']) ?></b> and all
-                <b><?= count($rows) ?> entries</b> in it (customers, dates, notes). This cannot be undone.</p>
+                <b><?= $total_rows ?> entries</b> in it (customers, dates, notes). This cannot be undone.</p>
             <p class="rm-text"><a href="voucher_export.php">Download an Excel backup first</a></p>
             <input type="hidden" name="token" value="<?= h($_SESSION['vm_token']) ?>">
             <input type="hidden" name="type_id" value="<?= $type_id ?>">
@@ -764,15 +821,23 @@ const RM_NAME = <?= json_encode($cur ? mb_strtoupper(trim($cur['name'])) : '') ?
 function rmCheck(){ document.getElementById('rmGo').disabled = document.getElementById('rmName').value.trim().toUpperCase() !== RM_NAME; }
 function rmReady(){ return document.getElementById('rmName').value.trim().toUpperCase() === RM_NAME; }
 
-function filterRows(){
-    const q = document.getElementById('q').value.toLowerCase();
-    const only = document.getElementById('onlyOut').checked;
-    document.querySelectorAll('#vt tbody tr').forEach(tr => {
-        const txt = Array.from(tr.querySelectorAll('input')).map(i => i.value).join(' ') + ' ' + tr.textContent;
-        const ok = txt.toLowerCase().includes(q) && (!only || tr.classList.contains('out'));
-        tr.style.display = ok ? '' : 'none';
-    });
+// Search / filter / paging all run on the server so only one page of rows is loaded.
+let searchTimer = null;
+function buildUrl(pg){
+    const u = new URLSearchParams();
+    u.set('type', <?= (int)$type_id ?>);
+    u.set('per', document.getElementById('perSel').value);
+    const q = document.getElementById('q').value.trim();
+    if (q) u.set('q', q);
+    if (document.getElementById('onlyOut').checked) u.set('out', '1');
+    if (pg > 1) u.set('pg', pg);
+    return 'voucher_monitoring.php?' + u.toString();
 }
+function applyFilters(){ location.href = buildUrl(1); }
+function searchSoon(){ clearTimeout(searchTimer); searchTimer = setTimeout(applyFilters, 600); }
+function goPage(n){ n = parseInt(n, 10); if (!n || n < 1) n = 1; location.href = buildUrl(n); }
+// keep the cursor at the end of the search box after the page reloads
+(function(){ const q = document.getElementById('q'); if (q && q.value) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } })();
 </script>
 </body>
 </html>
