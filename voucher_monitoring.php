@@ -9,13 +9,13 @@ if ($conn->connect_error) {
 // Admin and cashier can both open this page.
 //   - admin   : everything (add / remove voucher types, change beginning stock, edit rows)
 //   - cashier : view, search, edit the rows and export. Cannot add/remove vouchers or change stock.
-$is_admin   = !empty($_SESSION['admin']);
 $is_cashier = !empty($_SESSION['cashier']);
+$is_admin   = !empty($_SESSION['admin']) && !$is_cashier;   // a cashier login always gets the cashier page
 if (!isset($_SESSION['username']) || (!$is_admin && !$is_cashier)) {
     header("Location: index.php");
     exit();
 }
-$cashier_view   = $is_cashier && !$is_admin;   // cashier layout = green header + Transaction/Voucher tabs, no sidebar
+$cashier_view   = $is_cashier;   // cashier layout = green header + Transaction/Voucher tabs, no sidebar
 $admin_username = $_SESSION['username'];       // (name used in the logs for whoever is signed in)
 
 // ------------------------------------------------------------
@@ -270,6 +270,7 @@ $ending    = $beginning - $total_out;
 function h($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
 ?>
+<?php if ($cashier_view): ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -419,6 +420,26 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         .btn.rmgo:hover { background: #a52a22; border-color: #a52a22; }
         .btn.rmgo:disabled { background: #e6b5b1; border-color: #e6b5b1; cursor: not-allowed; }
 
+
+        /* ---------- cashier layout: its own design (no sidebar, no sheet tabs, no big stat boxes) ---------- */
+        body.cashier .page { padding: 16px 22px 40px; }
+        .cbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 26px; margin-bottom: 12px; padding: 10px 16px; background: #fff; border: 1px solid var(--line); border-left: 5px solid var(--dark); }
+        .cbar label { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 13px; text-transform: uppercase; color: var(--muted); }
+        .cbar select { height: 40px; min-width: 280px; max-width: 100%; padding: 0 10px; border: 1px solid #8fae8a; border-radius: 3px; background: #fff; font: inherit; font-size: 15px; font-weight: 700; color: var(--ink); }
+        .cbar select:focus { outline: 2px solid #9fcf99; }
+        .cstats { display: flex; flex-wrap: wrap; gap: 6px 26px; margin-left: auto; }
+        .cstats div { line-height: 1.15; }
+        .cstats span { display: block; font-size: 11px; text-transform: uppercase; color: var(--muted); }
+        .cstats b { font-size: 21px; }
+        .cstats .neg b { color: #b3261e; }
+        .cstats small { display: block; font-size: 11px; color: var(--muted); }
+        body.cashier .panel { background: transparent; border: none; padding: 0; }
+        body.cashier .toolbar { padding: 8px 0 4px; }
+        body.cashier #vt td input { padding: 10px 8px; font-size: 14.5px; }
+        body.cashier .table-wrap { background: #fff; }
+        body.cashier #vt tbody tr:nth-child(even) td { background: #f5faf2; }
+        body.cashier #vt tbody tr:hover td { background: #e9f4e4; }
+
         @media (max-width: 760px) {
             body.admin .page { margin-left: 0; }
             .sidebar { display: none; }
@@ -463,14 +484,37 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
 
 <div class="page">
     <?php $all_out = 0; $all_beg = 0; foreach ($types as $tt) { $all_out += (int)$tt['total_out']; $all_beg += (int)$tt['beginning']; } ?>
+<?php if (!$cashier_view): ?>
     <div class="titlebar">
         <h1>Voucher Monitoring</h1>
         <span class="sub">Every voucher from stock to customer to redeemed.</span>
         <span class="all"><b><?= count($types) ?></b> vouchers &middot; <b><?= $all_out ?></b> given out &middot; <b><?= $all_beg - $all_out ?></b> left in stock</span>
     </div>
+<?php endif; ?>
 
     <?php if ($flash): ?><div class="flash <?= h($flash_type) ?>"><?= h($flash) ?></div><?php endif; ?>
 
+<?php if ($cashier_view): ?>
+    <?php if ($types): ?>
+    <div class="cbar">
+        <label>Voucher
+            <select onchange="location.href='?type=' + this.value">
+                <?php foreach ($types as $t): ?>
+                    <option value="<?= (int)$t['id'] ?>" <?= $t['id'] == $type_id ? 'selected' : '' ?>><?= h($t['name']) ?> (<?= (int)$t['beginning'] - (int)$t['total_out'] ?> left)</option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <?php if ($cur): ?>
+        <div class="cstats">
+            <div><span>Beginning</span><b id="c_beg"><?= $beginning ?></b></div>
+            <div><span>Total out</span><b id="c_out"><?= $total_out ?></b></div>
+            <div id="endCard" class="<?= $ending < 0 ? 'neg' : '' ?>"><span>Ending</span><b id="c_end"><?= $ending ?></b><small id="endNote"><?= $ending < 0 ? 'Over the beginning stock' : 'still available' ?></small></div>
+            <div><span>Availed</span><b id="c_av"><?= $availed ?></b></div>
+        </div>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+<?php else: ?>
     <div class="sheets">
         <?php foreach ($types as $t):
             $tb = (int)$t['beginning']; $to = (int)$t['total_out']; $left = $tb - $to; ?>
@@ -481,6 +525,7 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         <?php endforeach; ?>
         <?php if ($is_admin): ?><button type="button" class="sheet add" onclick="openModal('typeModal')"><i class="fas fa-plus"></i> New voucher</button><?php endif; ?>
     </div>
+<?php endif; ?>
 
     <div class="panel">
 <?php if (!$cur): ?>
@@ -489,6 +534,7 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         <?php else: ?>No vouchers have been set up yet. Please ask an admin to add them.<?php endif; ?>
     </div>
 <?php else: ?>
+    <?php if (!$cashier_view): ?>
     <dl class="figures">
         <div>
             <dt>Beginning</dt>
@@ -509,6 +555,7 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
             <dd id="c_av"><?= $availed ?></dd>
         </div>
     </dl>
+    <?php endif; ?>
 
     <div class="toolbar">
         <input type="text" id="q" value="<?= h($q) ?>" placeholder="Search series no., name, note" autocomplete="off" oninput="searchSoon()" onkeydown="if(event.key==='Enter'){event.preventDefault();applyFilters();}">
@@ -621,6 +668,371 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
 <?php endif; ?>
 </div>
 
+<?php else: ?>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voucher Monitoring</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: rgb(227, 251, 203); }
+        .sidebar { width: 230px; height: 100vh; background-color: #1b5e20; color: #fff; position: fixed; padding-top: 20px; }
+        .sidebar ul { list-style-type: none; padding: 0; }
+        .sidebar ul li { padding: 15px; text-align: center; }
+        .sidebar ul li button { width: 100%; padding: 15px; background-color: #abd67c; color: #000; border: none; cursor: pointer; font-weight: bold; font-size: 15px; border-radius: 5px; }
+        .main-content { margin-left: 230px; padding: 20px; }
+
+        /* ---------- page header ---------- */
+        .pagehead { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 4px 0 22px; padding: 20px 24px; border-radius: 18px; color: #fff;
+                    background: radial-gradient(circle at 92% -20%, rgba(255,255,255,.18), transparent 45%), linear-gradient(120deg, #14361c 0%, #1b5e20 55%, #2e7d32 100%);
+                    box-shadow: 0 10px 28px rgba(27,94,32,.28); }
+        .ph-badge { width: 54px; height: 54px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff;
+                    background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28); transform: rotate(-6deg); }
+        .ph-title { font-size: 26px; font-weight: 800; letter-spacing: .2px; line-height: 1.1; }
+        .ph-sub { margin-top: 5px; font-size: 13px; color: #cfe9d3; }
+        .ph-stats { margin-left: auto; display: flex; gap: 10px; flex-wrap: wrap; }
+        .ph-stat { min-width: 92px; padding: 10px 16px; border-radius: 12px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); text-align: center; }
+        .ph-stat b { display: block; font-size: 22px; line-height: 1.1; }
+        .ph-stat span { font-size: 11px; letter-spacing: .5px; color: #cfe9d3; text-transform: uppercase; }
+
+        /* ---------- voucher tabs ---------- */
+        .tabs { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+        .tab { display: flex; flex-direction: column; gap: 7px; min-width: 190px; max-width: 260px; padding: 13px 16px; border-radius: 14px; background: #fff; border: 1px solid #d7e8da;
+               color: #1b3a22; text-decoration: none; text-align: left; box-shadow: 0 1px 3px rgba(20,54,28,.08); transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+        .tab:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(20,54,28,.14); border-color: #2e7d32; }
+        .tab-top { display: flex; align-items: center; gap: 9px; }
+        .tab-top i { width: 28px; height: 28px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #2e7d32; background: #e6f4e8; flex: none; }
+        .tab-name { font-size: 13px; font-weight: 800; letter-spacing: .3px; line-height: 1.2; }
+        .tab-meta { font-size: 12px; color: #5c6b5e; }
+        .tab-meta b { color: #1b3a22; font-size: 13px; }
+        .tab-bar { display: block; height: 6px; border-radius: 999px; background: #e3efe5; overflow: hidden; }
+        .tab-bar span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #43a047, #2e7d32); }
+        .tab.over .tab-bar span { background: linear-gradient(90deg, #ef6b78, #e0364a); }
+        .tab.active { background: linear-gradient(135deg, #1b5e20, #2e7d32); border-color: #1b5e20; color: #fff; box-shadow: 0 10px 22px rgba(27,94,32,.35); }
+        .tab.active .tab-top i { background: rgba(255,255,255,.2); color: #fff; }
+        .tab.active .tab-meta, .tab.active .tab-meta b { color: #e3f3e6; }
+        .tab.active .tab-bar { background: rgba(255,255,255,.25); }
+        .tab.active .tab-bar span { background: #fff; }
+        .tab.active.over .tab-bar span { background: #ffd0d4; }
+        .tab.add { flex-direction: row; align-items: center; justify-content: center; gap: 10px; min-width: 150px; background: transparent; border: 2px dashed #7fb986; color: #1b5e20; cursor: pointer; box-shadow: none; }
+        .tab.add:hover { background: #e6f4e8; border-color: #2e7d32; }
+        .tab.add .plus { width: 28px; height: 28px; border-radius: 50%; background: #2e7d32; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+
+        .summary { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 20px; }
+        .summary-item { flex: 1 1 180px; background: #fff; border-radius: 12px; padding: 18px 16px; text-align: center; border-top: 3px solid #2e7d32; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+        .summary-item h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .6px; color: #5c6b5e; }
+        .summary-item p { margin: 0; font-size: 28px; font-weight: 800; }
+        .summary-item.neg { border-top-color: #e0364a; }
+        .summary-item.neg p { color: #e0364a; }
+        .summary-item small { display: block; margin-top: 6px; color: #5c6b5e; font-size: 11px; }
+        .linkbtn { background: none; border: none; color: #1b5e20; cursor: pointer; text-decoration: underline; font-size: 11px; padding: 0; }
+
+        .toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 14px; }
+        .search { position: relative; }
+        .search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #1b5e20; }
+        .search input { padding: 11px 14px 11px 38px !important; border: 1px solid #cfe3d3; border-radius: 8px; width: 280px; font-size: 14px; }
+        .btn { background: #2e7d32; color: #fff; border: none; border-radius: 8px; padding: 11px 18px; font-weight: 700; cursor: pointer; font-size: 14px; }
+        .btn:hover { background: #1b5e20; }
+        .btn.ghost { background: #e6f4e8; color: #1b5e20; }
+        .btn.danger { background: #e0364a; }
+        .spacer { flex: 1; }
+
+        .table-wrap { background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { position: sticky; top: 0; z-index: 5; background: #1b5e20; color: #fff; padding: 12px 10px; font-size: 12px; letter-spacing: .5px; text-align: center; }
+        td { padding: 10px; border-bottom: 1px solid #e3efe5; text-align: center; }
+        tbody tr:nth-child(even) { background: #f3faf4; }
+        tbody tr.free td { color: #8a978c; }
+        td.left { text-align: left; }
+        .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; }
+        .pill.out { background: #fff1d6; color: #8a5a00; }
+        .pill.free { background: #e6f4e8; color: #1b5e20; }
+        .icon-btn { background: #eaf6ec; border: none; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; color: #1b5e20; }
+        .icon-btn.del { color: #e0364a; background: #fdeced; }
+        .flash { padding: 12px 16px; border-radius: 8px; margin-bottom: 14px; font-weight: 700; font-size: 14px; }
+        .flash.ok { background: #e7f8ee; color: #1b5e20; }
+        .flash.err { background: #fdeced; color: #b3202f; }
+        td input { width: 100%; box-sizing: border-box; border: 1px solid transparent; background: transparent; padding: 8px 8px; font-size: 14px; text-align: center; border-radius: 6px; font-family: inherit; }
+        td input:hover { border-color: #cfe3d3; background: #fff; }
+        td input:focus { outline: none; border-color: #2e7d32; background: #fff; box-shadow: 0 0 0 2px #c9e6cd; }
+        td input.saving { border-color: #f0b429; }
+        td input.saved { border-color: #2e7d32; background: #e7f8ee; }
+        td input.failed { border-color: #e0364a; background: #fdeced; }
+        td input[type=text] { text-align: left; min-width: 120px; }
+        td input[data-f=customer_name], td input[data-f=redeemed_by], td input[data-f=mop] { text-transform: uppercase; }
+        td input[data-f=customer_name]::placeholder, td input[data-f=redeemed_by]::placeholder { text-transform: none; }
+        td.dcell { white-space: nowrap; }
+        .dwrap { position: relative; display: inline-block; }
+        .dwrap input[data-date] { padding-right: 30px; text-align: center; }
+        .dwrap .hid { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; padding: 0; border: 0; }
+        .main-content .dwrap .cal { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: none !important; color: #2e7d32 !important; box-shadow: none !important; padding: 4px !important; font-size: 13px !important; }
+        /* custom dropdown for Mode of Payment / Remarks */
+        td input[data-opts] { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%232e7d32' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 26px !important; }
+        .vm-menu { position: fixed; z-index: 1000; min-width: 190px; max-height: 280px; overflow-y: auto; background: #fff; border: 1px solid #cfe3d3; border-radius: 12px; box-shadow: 0 12px 32px rgba(20,54,28,.22); padding: 6px; display: none; font-family: Arial, sans-serif; text-transform: none; }
+        .vm-menu.open { display: block; animation: vmIn .12s ease-out; }
+        @keyframes vmIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+        .vm-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; font-size: 13.5px; font-weight: 700; color: #1b3a22; cursor: pointer; letter-spacing: .2px; }
+        .vm-item::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #c9e6cd; flex: none; }
+        .vm-item.active, .vm-item:hover { background: #e6f4e8; color: #1b5e20; }
+        .vm-item.active::before, .vm-item:hover::before { background: #2e7d32; }
+        .vm-item.selected { background: #2e7d32; color: #fff; }
+        .vm-item.selected::before { background: #fff; }
+        .vm-item.clear { color: #b3202f; font-weight: 600; margin-top: 4px; border-top: 1px solid #e3efe5; border-radius: 0 0 8px 8px; }
+        .vm-item.clear::before { background: #f3c1c6; }
+        .vm-item.clear:hover { background: #fdeced; color: #b3202f; }
+        .vm-item.clear:hover::before { background: #e0364a; }
+        .main-content a.exportbtn { text-decoration: none; display: inline-block; background: #fff !important; color: #1b5e20 !important; border: 1px solid #2e7d32; border-radius: 8px; padding: 10px 16px; font-weight: 700; font-size: 14px; }
+        .main-content a.exportbtn:hover { background: #e6f4e8 !important; }
+        .main-content .btn.removebtn { background: #fff !important; color: #c62839 !important; border: 1px solid #e8a3ab !important; box-shadow: none !important; }
+        .main-content .btn.removebtn:hover { background: #fdeced !important; border-color: #e0364a !important; }
+        .rm-icon { width: 58px; height: 58px; margin: 0 auto 10px; border-radius: 50%; background: #fdeced; color: #e0364a; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+        .rm-text { font-size: 13.5px; color: #3b4a3e; line-height: 1.5; text-align: center; text-transform: none; margin: 6px 0; }
+        .rm-text a { color: #1b5e20; font-weight: 700; }
+        .modal .btn.rmgo { background: #e0364a !important; color: #fff !important; }
+        .modal .btn.rmgo:hover { background: #c62839 !important; }
+        .modal .btn.rmgo:disabled { background: #f1b9bf !important; cursor: not-allowed; transform: none; }
+        .perpage { font-size: 13px; font-weight: 700; color: #1b5e20; display: inline-flex; align-items: center; gap: 6px; }
+        .perpage select { padding: 8px 10px; border: 1px solid #cfe3d3; border-radius: 8px; font-size: 14px; font-weight: 700; color: #1b5e20; background: #fff; }
+        .pager { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin: 14px 0 6px; font-size: 13px; color: #1b5e20; }
+        .pbtns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .pbtns button { padding: 8px 14px; border: 1px solid #2e7d32; border-radius: 8px; background: #fff; color: #1b5e20; font-weight: 700; cursor: pointer; }
+        .pbtns button:hover:not(:disabled) { background: #e6f4e8; }
+        .pbtns button:disabled { opacity: .4; cursor: default; }
+        .pcur { font-weight: 700; padding: 0 6px; }
+        .pcur input { width: 60px; padding: 7px; border: 1px solid #cfe3d3; border-radius: 8px; text-align: center; font-size: 14px; }
+        .savestate { font-size: 13px; font-weight: 700; color: #5c6b5e; }
+        .savestate.err { color: #e0364a; }
+        .empty { padding: 40px; text-align: center; color: #5c6b5e; }
+
+        .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 50; align-items: center; justify-content: center; }
+        .modal-bg.open { display: flex; }
+        .modal { background: #fff; border-radius: 14px; width: 94vw; max-width: 520px; max-height: 92vh; overflow: auto; padding: 22px; }
+        .modal h2 { margin: 0 0 14px; font-size: 18px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .grid .full { grid-column: 1 / -1; }
+        .field label { display: block; font-size: 11px; font-weight: 700; color: #5c6b5e; margin-bottom: 4px; letter-spacing: .4px; }
+        .field input, .field select { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #cfe3d3; border-radius: 8px; font-size: 14px; }
+        .modal .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+        /* assets/style.css forces every <button> green with !important; re-assert the variants used here */
+        .sidebar { z-index: 100 !important; }   /* always stay above the table, even when the page scrolls sideways */
+        .main-content .linkbtn { background: none !important; color: #1b5e20 !important; box-shadow: none !important; padding: 2px 4px !important; font-size: 12px !important; text-decoration: underline; transform: none !important; }
+        .main-content .btn.ghost, .modal .btn.ghost { background: #e6f4e8 !important; color: #1b5e20 !important; }
+                .main-content .tab.add { background: transparent !important; color: #1b5e20 !important; border: 2px dashed #7fb986 !important; box-shadow: none !important; padding: 13px 16px !important; font-size: 13px !important; letter-spacing: .3px; transform: none; }
+        .main-content .tab.add:hover { background: #e6f4e8 !important; border-color: #2e7d32 !important; }
+        /* assets/style.css puts overflow:hidden on every <table>, which stops sticky headers from working.
+           Undo it here so the dark green header row stays visible while scrolling. */
+        .main-content #vt { overflow: visible !important; border: none !important; border-radius: 0 !important; }
+        .main-content #vt thead, .main-content #vt thead tr, .main-content #vt th { position: sticky; top: 0; z-index: 5; background: #1b5e20 !important; box-shadow: 0 2px 4px rgba(0,0,0,.18); }
+        .main-content #vt th:first-child { border-top-left-radius: 12px; }
+        .main-content #vt th:last-child  { border-top-right-radius: 12px; }
+        .main-content #vt thead, .main-content #vt thead tr { position: static; box-shadow: none; }
+
+        /* search box: icon sits inside the box, text starts after it */
+        .main-content .search { position: relative; display: inline-block; }
+        .main-content .search input[type="text"] { padding: 11px 14px 11px 42px !important; height: 44px; box-sizing: border-box; width: 300px; border: 1px solid #cfe3d3 !important; border-radius: 10px !important; background: #fff !important; }
+        .main-content .search input[type="text"]:focus { outline: none; border-color: #2e7d32 !important; box-shadow: 0 0 0 3px #c9e6cd; }
+        .main-content .search i { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); font-size: 15px; color: #2e7d32; pointer-events: none; }
+        @media (max-width: 640px) { .main-content { margin-left: 0; } .sidebar { display: none; } .grid { grid-template-columns: 1fr; } }
+    </style>
+    <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="sidebar">
+    <div class="sidebar-profile">
+        <div class="sidebar-avatar"><i class="fas fa-user"></i></div>
+        <div class="sidebar-profile-text">
+            <span class="sidebar-greeting">Hello,</span>
+            <span class="sidebar-username"><?= h($admin_username) ?></span>
+        </div>
+    </div>
+    <ul>
+        <li><button onclick="location.href='admin.php'"><i class="fas fa-tachometer-alt"></i>   DASHBOARD</button></li>
+        <li><button onclick="location.href='customer.php'"><i class="fas fa-users"></i>   CUSTOMERS</button></li>
+        <li><button onclick="location.href='block_medrep.php'"><i class="fas fa-user-lock"></i>   BLOCK MEDREP</button></li>
+        <li><button onclick="location.href='companies.php'"><i class="fas fa-building"></i>   COMPANIES</button></li>
+        <li><button onclick="location.href='daily.php'"><i class="fas fa-calendar-day"></i>   RECEIVABLES/PAYABLES</button></li>
+        <li><button onclick="location.href='receivables_summary.php'"><i class="fas fa-calendar-alt"></i>   SUMMARY</button></li>
+        <li><button onclick="location.href='voucher_monitoring.php'"><i class="fas fa-ticket-alt"></i>   VOUCHER MONITORING</button></li>
+        <li><button onclick="location.href='report.php'"><i class="fas fa-chart-line"></i>   SALES REPORTS</button></li>
+        <li><button onclick="location.href='cashout.php'"><i class="fas fa-money-bill-wave"></i>   CASHOUT REPORT</button></li>
+        <li><button onclick="location.href='users.php'"><i class="fas fa-users-cog"></i>   USERS</button></li>
+        <li><button onclick="location.href='tracking.php'"><i class="fas fa-bell"></i>   ADMIN TRACKING</button></li>
+        <li><button onclick="location.href='index.php'"><i class="fas fa-sign-out-alt"></i>   LOGOUT</button></li>
+    </ul>
+</div>
+
+<div class="main-content">
+    <div class="pagehead">
+        <div class="ph-badge"><i class="fas fa-ticket-alt"></i></div>
+        <div>
+            <div class="ph-title">Voucher Monitoring</div>
+            <div class="ph-sub">Track every voucher from stock to customer to redeemed.</div>
+        </div>
+        <div class="ph-stats">
+            <?php $all_out = 0; $all_beg = 0; foreach ($types as $tt) { $all_out += (int)$tt['total_out']; $all_beg += (int)$tt['beginning']; } ?>
+            <div class="ph-stat"><b><?= count($types) ?></b><span>Vouchers</span></div>
+            <div class="ph-stat"><b><?= $all_out ?></b><span>Given out</span></div>
+            <div class="ph-stat"><b><?= $all_beg - $all_out ?></b><span>Left in stock</span></div>
+        </div>
+    </div>
+
+    <?php if ($flash): ?><div class="flash <?= h($flash_type) ?>"><?= h($flash) ?></div><?php endif; ?>
+
+    <div class="tabs">
+        <?php foreach ($types as $t):
+            $tb = (int)$t['beginning']; $to = (int)$t['total_out']; $left = $tb - $to;
+            $pct = $tb > 0 ? min(100, round($to / $tb * 100)) : 0; ?>
+            <a class="tab <?= $t['id'] == $type_id ? 'active' : '' ?> <?= $left < 0 ? 'over' : '' ?>" href="?type=<?= (int)$t['id'] ?>">
+                <span class="tab-top"><i class="fas fa-ticket-alt"></i><span class="tab-name"><?= h($t['name']) ?></span></span>
+                <span class="tab-meta"><b><?= $to ?></b> out &middot; <b><?= $left ?></b> left</span>
+                <span class="tab-bar"><span style="width:<?= $pct ?>%"></span></span>
+            </a>
+        <?php endforeach; ?>
+        <button type="button" class="tab add" onclick="openModal('typeModal')">
+            <span class="plus"><i class="fas fa-plus"></i></span>
+            <span class="tab-name">New voucher</span>
+        </button>
+    </div>
+
+<?php if (!$cur): ?>
+    <div class="table-wrap"><div class="empty">No voucher types yet. Click <b>New voucher</b> to add one, or import <b>voucher_monitoring_setup.sql</b> to load your Excel data.</div></div>
+<?php else: ?>
+    <div class="summary">
+        <div class="summary-item">
+            <h2>BEGINNING</h2>
+            <p id="c_beg"><?= $beginning ?></p>
+            <small><button class="linkbtn" onclick="openModal('begModal')">Change</button></small>
+        </div>
+        <div class="summary-item">
+            <h2>TOTAL OUT</h2>
+            <p id="c_out"><?= $total_out ?></p>
+            <small>vouchers given to customers</small>
+        </div>
+        <div class="summary-item <?= $ending < 0 ? 'neg' : '' ?>" id="endCard">
+            <h2>ENDING</h2>
+            <p id="c_end"><?= $ending ?></p>
+            <small id="endNote"><?= $ending < 0 ? 'Over the beginning stock' : 'still available' ?></small>
+        </div>
+        <div class="summary-item">
+            <h2>AVAILED</h2>
+            <p id="c_av"><?= $availed ?></p>
+            <small>with a date availed</small>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <div class="search"><i class="fas fa-search"></i><input type="text" id="q" value="<?= h($q) ?>" placeholder="Search series no., name, note..." autocomplete="off" oninput="searchSoon()" onkeydown="if(event.key==='Enter'){event.preventDefault();applyFilters();}"></div>
+        <label style="font-size:13px;font-weight:700;color:#1b5e20;"><input type="checkbox" id="onlyOut" <?= $only_out ? 'checked' : '' ?> onchange="applyFilters()"> Show given out only</label>
+        <label class="perpage">Show
+            <select id="perSel" onchange="applyFilters()">
+                <?php foreach ($per_opts as $o): ?><option value="<?= $o ?>" <?= $o === $per ? 'selected' : '' ?>><?= $o ?></option><?php endforeach; ?>
+            </select> rows
+        </label>
+        <div class="spacer"></div>
+        <a class="btn exportbtn" href="voucher_export.php" title="Download every voucher as its own sheet in one Excel file"><i class="fas fa-file-excel"></i> Export to Excel</a>
+        <button type="button" class="btn removebtn" onclick="openModal('rmModal')"><i class="fas fa-trash-alt"></i> Remove voucher</button>
+        <span id="saveState" class="savestate">All changes save automatically</span>
+    </div>
+
+    <div class="table-wrap">
+        <table id="vt">
+            <thead>
+                <tr>
+                    <th>DATE</th><th>SOLD OUT</th><th>SERIES NO.</th><th>CUSTOMER NAME</th><th>REDEEMED BY</th>
+                    <th>MODE OF PAYMENT</th><th>REMARKS (SPONSORSHIP OR SOLD)</th><th>DATE AVAILED</th><th>NOTE (C/O ACCTNG)</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($rows as $r): $rid = (int)$r['id']; ?>
+                <tr class="<?= $r['sold_out'] ? 'out' : 'free' ?>" data-id="<?= $rid ?>">
+                    <td class="dcell"><div class="dwrap"><input type="text" data-f="date_sold" data-date="1" data-iso="<?= h($r['date_sold']) ?>" value="<?= h(fmt_date($r['date_sold'])) ?>" placeholder="Pick a date" autocomplete="off"><button type="button" class="cal" tabindex="-1" title="Pick from calendar"><i class="fas fa-calendar-alt"></i></button><input type="date" class="hid" tabindex="-1" value="<?= h($r['date_sold']) ?>"></div></td>
+                    <td><span class="pill <?= $r['sold_out'] ? 'out' : 'free' ?>"><?= $r['sold_out'] ? 'OUT' : 'IN STOCK' ?></span></td>
+                    <td><b><?= str_pad((string)$r['series_no'], 3, '0', STR_PAD_LEFT) ?></b></td>
+                    <td><input type="text" data-f="customer_name" value="<?= h($r['customer_name']) ?>" autocomplete="off"></td>
+                    <td><input type="text" data-f="redeemed_by" value="<?= h($r['redeemed_by']) ?>" placeholder="Who redeemed it" autocomplete="off"></td>
+                    <td><input type="text" data-f="mop" data-opts="mop" value="<?= h($r['mop']) ?>" autocomplete="off"></td>
+                    <td><input type="text" data-f="remarks" data-opts="remarks" value="<?= h($r['remarks']) ?>" autocomplete="off"></td>
+                    <td class="dcell"><div class="dwrap"><input type="text" data-f="date_availed" data-date="1" data-iso="<?= h($r['date_availed']) ?>" value="<?= h(fmt_date($r['date_availed'])) ?>" placeholder="Pick a date" autocomplete="off"><button type="button" class="cal" tabindex="-1" title="Pick from calendar"><i class="fas fa-calendar-alt"></i></button><input type="date" class="hid" tabindex="-1" value="<?= h($r['date_availed']) ?>"></div></td>
+                    <td><input type="text" data-f="note" value="<?= h($r['note']) ?>" autocomplete="off"></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php if (!$rows && !$total_rows): ?><div class="empty">No series rows yet. Click <b>Change</b> under Beginning and enter the number of vouchers.</div>
+        <?php elseif (!$rows): ?><div class="empty">No vouchers match your search.</div><?php endif; ?>
+    </div>
+
+    <?php if ($total_rows): $from = $match_rows ? $offset + 1 : 0; $to = $offset + count($rows); ?>
+    <div class="pager">
+        <span class="pinfo">Showing <b><?= $from ?>–<?= $to ?></b> of <b><?= $match_rows ?></b><?= $match_rows !== $total_rows ? " (filtered from $total_rows)" : '' ?></span>
+        <div class="pbtns">
+            <button type="button" onclick="goPage(1)" <?= $pg <= 1 ? 'disabled' : '' ?> title="First">&laquo;</button>
+            <button type="button" onclick="goPage(<?= $pg - 1 ?>)" <?= $pg <= 1 ? 'disabled' : '' ?>>&lsaquo; Prev</button>
+            <span class="pcur">Page <input type="number" id="pgIn" min="1" max="<?= $pages ?>" value="<?= $pg ?>" onkeydown="if(event.key==='Enter'){goPage(this.value);}"> of <?= $pages ?></span>
+            <button type="button" onclick="goPage(<?= $pg + 1 ?>)" <?= $pg >= $pages ? 'disabled' : '' ?>>Next &rsaquo;</button>
+            <button type="button" onclick="goPage(<?= $pages ?>)" <?= $pg >= $pages ? 'disabled' : '' ?> title="Last">&raquo;</button>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- Remove voucher -->
+    <div class="modal-bg" id="rmModal">
+        <form class="modal" method="POST" style="max-width:460px" onsubmit="return rmReady();">
+            <div class="rm-icon"><i class="fas fa-exclamation-triangle"></i></div>
+            <h2 style="text-align:center">Remove this voucher?</h2>
+            <p class="rm-text">You are about to permanently remove <b><?= h($cur['name']) ?></b> and all
+                <b><?= $total_rows ?> entries</b> in it (customers, dates, notes). This cannot be undone.</p>
+            <p class="rm-text"><a href="voucher_export.php">Download an Excel backup first</a></p>
+            <input type="hidden" name="token" value="<?= h($_SESSION['vm_token']) ?>">
+            <input type="hidden" name="type_id" value="<?= $type_id ?>">
+            <input type="hidden" name="action" value="delete_type">
+            <div class="field"><label>TYPE THE VOUCHER NAME TO CONFIRM</label>
+                <input type="text" name="confirm_name" id="rmName" autocomplete="off" placeholder="<?= h($cur['name']) ?>" oninput="rmCheck()"></div>
+            <div class="actions">
+                <button type="button" class="btn ghost" onclick="closeModal('rmModal')">Cancel</button>
+                <button class="btn rmgo" id="rmGo" disabled>Remove voucher</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Beginning stock -->
+    <div class="modal-bg" id="begModal">
+        <form class="modal" method="POST" style="max-width:360px">
+            <h2>Beginning stock</h2>
+            <input type="hidden" name="token" value="<?= h($_SESSION['vm_token']) ?>">
+            <input type="hidden" name="type_id" value="<?= $type_id ?>">
+            <input type="hidden" name="action" value="set_beginning">
+            <div class="field"><label>BEGINNING (NUMBER OF VOUCHERS)</label><input type="number" min="0" name="beginning" value="<?= $beginning ?>" required></div>
+            <div class="actions">
+                <button type="button" class="btn ghost" onclick="closeModal('begModal')">Cancel</button>
+                <button class="btn">Save</button>
+            </div>
+        </form>
+    </div>
+<?php endif; ?>
+
+    <!-- New voucher type -->
+    <div class="modal-bg" id="typeModal">
+        <form class="modal" method="POST" style="max-width:400px">
+            <h2>New voucher</h2>
+            <input type="hidden" name="token" value="<?= h($_SESSION['vm_token']) ?>">
+            <input type="hidden" name="type_id" value="<?= $type_id ?>">
+            <input type="hidden" name="action" value="add_type">
+            <div class="grid">
+                <div class="field full"><label>VOUCHER NAME</label><input type="text" name="name" required></div>
+                <div class="field full"><label>BEGINNING / TOTAL VOUCHERS (creates series 1 up to this number)</label><input type="number" min="0" max="5000" name="beginning" value="80" required></div>
+            </div>
+            <div class="actions">
+                <button type="button" class="btn ghost" onclick="closeModal('typeModal')">Cancel</button>
+                <button class="btn">Create</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<?php endif; ?>
 <script>
 function openModal(id){ document.getElementById(id).classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
@@ -648,8 +1060,9 @@ function saveField(inp, val){
         else { inp.dataset.last = (j.value || ''); fit(inp); }
         inp.classList.add('saved'); setTimeout(() => inp.classList.remove('saved'), 1200);
         tr.classList.toggle('out', j.sold_out === 1); tr.classList.toggle('free', j.sold_out !== 1);
-        const pill = tr.querySelector('.st');
-        pill.className = 'st ' + (j.sold_out ? 'out' : 'in'); pill.textContent = j.sold_out ? 'Out' : 'In stock';
+        const pill = tr.querySelector('.pill, .st');
+        if (pill.classList.contains('st')) { pill.className = 'st ' + (j.sold_out ? 'out' : 'in'); pill.textContent = j.sold_out ? 'Out' : 'In stock'; }
+        else { pill.className = 'pill ' + (j.sold_out ? 'out' : 'free'); pill.textContent = j.sold_out ? 'OUT' : 'IN STOCK'; }
         document.getElementById('c_beg').textContent = j.beginning;
         document.getElementById('c_out').textContent = j.total_out;
         document.getElementById('c_end').textContent = j.ending;

@@ -2,6 +2,15 @@
 session_start();
 ob_start();
 
+// Logout: the Logout buttons link here with ?logout=true. Clear the whole session so an
+// earlier admin login can never leak into the next person who signs in on this browser.
+if (isset($_GET['logout'])) {
+    $_SESSION = [];
+    session_destroy();
+    header("Location: index.php");
+    exit();
+}
+
 
 
 
@@ -40,6 +49,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $passwordOk = $looksHashed ? password_verify($password, $stored) : ($password === $stored);
 
         if ($passwordOk) {
+            unset($_SESSION['admin'], $_SESSION['cashier']);   // never keep the previous user's role
             $_SESSION['username'] = $user['username'];
             if (strtolower($user['role']) === 'cashier') {
                 $_SESSION['cashier'] = true;
