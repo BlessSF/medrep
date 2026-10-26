@@ -148,10 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $act = $_POST['action'] ?? '';
 
-        if (!$is_admin) {
-            $flash = 'Only an admin can add or remove vouchers or change the beginning stock.';
-            $flash_type = 'err';
-        } elseif ($act === 'add_type') {
+        if ($act === 'add_type') {
             $name = strtoupper(trim((string)($_POST['name'] ?? '')));
             $beg  = min(5000, max(0, (int)($_POST['beginning'] ?? 0)));
             if ($name === '') {
@@ -187,6 +184,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 vm_log($conn, 'Voucher removed', $admin_username, "Removed voucher {$vt['name']} and its {$vt['n']} entries");
                 $flash = "Voucher \"{$vt['name']}\" was removed.";
                 $type_id = 0;
+            }
+        } elseif ($act === 'edit_type') {
+            // Rename a voucher and/or change its beginning stock (missing series rows are added).
+            $name = mb_strtoupper(trim((string)($_POST['name'] ?? '')));
+            $beg  = min(5000, max(0, (int)($_POST['beginning'] ?? 0)));
+            if ($name === '') {
+                $flash = 'Voucher name is required.'; $flash_type = 'err';
+            } else {
+                $s = $conn->prepare("UPDATE voucher_types SET name = ?, beginning = ? WHERE id = ?");
+                $s->bind_param('sii', $name, $beg, $type_id);
+                if ($s->execute()) {
+                    vm_fill_series($conn, $type_id, $beg);
+                    vm_log($conn, 'Voucher edited', $admin_username, "Voucher #$type_id is now $name (beginning $beg)");
+                    $flash = 'Voucher updated.';
+                } else {
+                    $flash = 'Another voucher already uses that name.'; $flash_type = 'err';
+                }
             }
         } elseif ($act === 'set_beginning') {
             $beg = min(5000, max(0, (int)($_POST['beginning'] ?? 0)));
@@ -421,20 +435,49 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         .btn.rmgo:disabled { background: #e6b5b1; border-color: #e6b5b1; cursor: not-allowed; }
 
 
-        /* ---------- cashier layout: its own design (no sidebar, no sheet tabs, no big stat boxes) ---------- */
+        /* ---------- cashier layout ---------- */
         body.cashier .page { padding: 16px 22px 40px; }
-        .cbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 26px; margin-bottom: 12px; padding: 10px 16px; background: #fff; border: 1px solid var(--line); border-left: 5px solid var(--dark); }
-        .cbar label { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 13px; text-transform: uppercase; color: var(--muted); }
-        .cbar select { height: 40px; min-width: 280px; max-width: 100%; padding: 0 10px; border: 1px solid #8fae8a; border-radius: 3px; background: #fff; font: inherit; font-size: 15px; font-weight: 700; color: var(--ink); }
-        .cbar select:focus { outline: 2px solid #9fcf99; }
-        .cstats { display: flex; flex-wrap: wrap; gap: 6px 26px; margin-left: auto; }
-        .cstats div { line-height: 1.15; }
-        .cstats span { display: block; font-size: 11px; text-transform: uppercase; color: var(--muted); }
-        .cstats b { font-size: 21px; }
-        .cstats .neg b { color: #b3261e; }
-        .cstats small { display: block; font-size: 11px; color: var(--muted); }
+        .vsec { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 8px; }
+        .vsec h2 { margin: 0; font-size: 13px; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); }
+        .vpick { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-bottom: 18px; }
+        .vcard { display: block; padding: 10px 12px 11px; background: #fff; border: 1px solid var(--line); border-radius: 3px; color: var(--ink); text-decoration: none; }
+        .vcard:hover { border-color: var(--green); background: #f6fbf3; }
+        .vcard b { display: block; font-size: 13.5px; line-height: 1.25; text-transform: uppercase; }
+        .vcard span { display: block; margin-top: 3px; font-size: 12px; color: var(--muted); }
+        .vcard i { display: block; height: 4px; margin-top: 8px; background: #e3ebe0; font-style: normal; }
+        .vcard i em { display: block; height: 100%; background: #7fb07a; }
+        .vcard.active { background: var(--dark); border-color: var(--dark); color: #fff; }
+        .vcard.active span { color: #cfe3cb; }
+        .vcard.active i { background: rgba(255,255,255,.25); }
+        .vcard.active i em { background: #fff; }
+        .vcard.over i em { background: #e0584c; }
+        .vcard.addcard { display: flex; align-items: center; justify-content: center; border: 2px dashed #8fae8a; background: transparent; color: var(--dark); font: inherit; font-weight: 700; font-size: 14px; cursor: pointer; min-height: 70px; }
+        .vcard.addcard:hover { background: #eef7ea; }
+
+        .vtitle { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .vtitle h1 { margin: 0; font-size: 22px; text-transform: uppercase; }
+        .vtitle .spacer { flex: 1; }
+
+        .vstats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+        .tile { background: #fff; border: 1px solid var(--line); border-top: 5px solid var(--dark); padding: 12px 16px 14px; }
+        .tile .lab { font-size: 12px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); }
+        .tile .num { margin-top: 4px; font-size: 38px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+        .tile .sub { margin-top: 6px; font-size: 12px; color: var(--muted); }
+        .tile.t-out { border-top-color: #d99100; }
+        .tile.t-out .num { color: #9a5b00; }
+        .tile.t-end { border-top-color: #2e7d32; }
+        .tile.t-end .num { color: #1b5e20; }
+        .tile.t-end.neg { border-top-color: #c9392f; }
+        .tile.t-end.neg .num { color: #b3261e; }
+        .tile.t-av { border-top-color: #4a6a8a; }
+        .tile.t-av .num { color: #34526f; }
+        .meter { height: 6px; margin-top: 9px; background: #e3ebe0; }
+        .meter span { display: block; height: 100%; background: #2e7d32; }
+        .t-end.neg .meter span { background: #c9392f; }
+        @media (max-width: 900px) { .vstats { grid-template-columns: repeat(2, 1fr); } }
+
         body.cashier .panel { background: transparent; border: none; padding: 0; }
-        body.cashier .toolbar { padding: 8px 0 4px; }
+        body.cashier .toolbar { padding: 4px 0; }
         body.cashier #vt td input { padding: 10px 8px; font-size: 14.5px; }
         body.cashier .table-wrap { background: #fff; }
         body.cashier #vt tbody tr:nth-child(even) td { background: #f5faf2; }
@@ -450,9 +493,8 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         }
     </style>
 </head>
-<body class="<?= $cashier_view ? 'cashier' : 'admin' ?>">
+<body class="cashier">
 
-<?php if ($cashier_view): ?>
 <div class="header">
     <div class="header-brand">
         <div class="header-logo"><i class="fas fa-hand-holding-medical"></i></div>
@@ -464,99 +506,59 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
     <a href="index.php?logout=true" class="logout-button"><i class="fas fa-sign-out-alt"></i> Logout</a>
 </div>
 <?php require_once __DIR__ . '/includes/cashier_tabs.php'; cashier_tabs('voucher'); ?>
-<?php else: ?>
-<div class="sidebar">
-    <div class="who">Hello,<b><?= h($admin_username) ?></b></div>
-    <a href="admin.php"><i class="fas fa-tachometer-alt"></i>Dashboard</a>
-    <a href="customer.php"><i class="fas fa-users"></i>Customers</a>
-    <a href="block_medrep.php"><i class="fas fa-user-lock"></i>Block Medrep</a>
-    <a href="companies.php"><i class="fas fa-building"></i>Companies</a>
-    <a href="daily.php"><i class="fas fa-calendar-day"></i>Receivables/Payables</a>
-    <a href="receivables_summary.php"><i class="fas fa-calendar-alt"></i>Summary</a>
-    <a href="voucher_monitoring.php" class="on"><i class="fas fa-ticket-alt"></i>Voucher Monitoring</a>
-    <a href="report.php"><i class="fas fa-chart-line"></i>Sales Reports</a>
-    <a href="cashout.php"><i class="fas fa-money-bill-wave"></i>Cashout Report</a>
-    <a href="users.php"><i class="fas fa-users-cog"></i>Users</a>
-    <a href="tracking.php"><i class="fas fa-bell"></i>Admin Tracking</a>
-    <a href="index.php"><i class="fas fa-sign-out-alt"></i>Logout</a>
-</div>
-<?php endif; ?>
 
 <div class="page">
-    <?php $all_out = 0; $all_beg = 0; foreach ($types as $tt) { $all_out += (int)$tt['total_out']; $all_beg += (int)$tt['beginning']; } ?>
-<?php if (!$cashier_view): ?>
-    <div class="titlebar">
-        <h1>Voucher Monitoring</h1>
-        <span class="sub">Every voucher from stock to customer to redeemed.</span>
-        <span class="all"><b><?= count($types) ?></b> vouchers &middot; <b><?= $all_out ?></b> given out &middot; <b><?= $all_beg - $all_out ?></b> left in stock</span>
-    </div>
-<?php endif; ?>
-
     <?php if ($flash): ?><div class="flash <?= h($flash_type) ?>"><?= h($flash) ?></div><?php endif; ?>
 
-<?php if ($cashier_view): ?>
-    <?php if ($types): ?>
-    <div class="cbar">
-        <label>Voucher
-            <select onchange="location.href='?type=' + this.value">
-                <?php foreach ($types as $t): ?>
-                    <option value="<?= (int)$t['id'] ?>" <?= $t['id'] == $type_id ? 'selected' : '' ?>><?= h($t['name']) ?> (<?= (int)$t['beginning'] - (int)$t['total_out'] ?> left)</option>
-                <?php endforeach; ?>
-            </select>
-        </label>
-        <?php if ($cur): ?>
-        <div class="cstats">
-            <div><span>Beginning</span><b id="c_beg"><?= $beginning ?></b></div>
-            <div><span>Total out</span><b id="c_out"><?= $total_out ?></b></div>
-            <div id="endCard" class="<?= $ending < 0 ? 'neg' : '' ?>"><span>Ending</span><b id="c_end"><?= $ending ?></b><small id="endNote"><?= $ending < 0 ? 'Over the beginning stock' : 'still available' ?></small></div>
-            <div><span>Availed</span><b id="c_av"><?= $availed ?></b></div>
-        </div>
-        <?php endif; ?>
-    </div>
-    <?php endif; ?>
-<?php else: ?>
-    <div class="sheets">
+    <div class="vsec"><h2>Vouchers</h2></div>
+    <div class="vpick">
         <?php foreach ($types as $t):
-            $tb = (int)$t['beginning']; $to = (int)$t['total_out']; $left = $tb - $to; ?>
-            <a class="sheet <?= $t['id'] == $type_id ? 'active' : '' ?> <?= $left < 0 ? 'over' : '' ?>" href="?type=<?= (int)$t['id'] ?>">
-                <?= h($t['name']) ?>
-                <small><?= $to ?> out / <?= $left ?> left</small>
+            $tb = (int)$t['beginning']; $to = (int)$t['total_out']; $left = $tb - $to;
+            $pct = $tb > 0 ? min(100, round($to / $tb * 100)) : 0; $isCur = ($t['id'] == $type_id); ?>
+            <a class="vcard <?= $isCur ? 'active' : '' ?> <?= $left < 0 ? 'over' : '' ?>" href="?type=<?= (int)$t['id'] ?>">
+                <b><?= h($t['name']) ?></b>
+                <span <?= $isCur ? 'id="vcCount"' : '' ?>><?= $to ?> out &middot; <?= $left ?> left</span>
+                <i><em style="width:<?= $pct ?>%"></em></i>
             </a>
         <?php endforeach; ?>
-        <?php if ($is_admin): ?><button type="button" class="sheet add" onclick="openModal('typeModal')"><i class="fas fa-plus"></i> New voucher</button><?php endif; ?>
+        <button type="button" class="vcard addcard" onclick="openModal('typeModal')">+ Add voucher</button>
     </div>
-<?php endif; ?>
+
+<?php if (!$cur): ?>
+    <div class="empty">No vouchers yet. Click <b>Add voucher</b> to create one.</div>
+<?php else: ?>
+    <div class="vtitle">
+        <h1><?= h($cur['name']) ?></h1>
+        <div class="spacer"></div>
+        <button type="button" class="btn plain" onclick="openModal('editModal')"><i class="fas fa-pen"></i> Edit voucher</button>
+        <button type="button" class="btn danger-outline" onclick="openModal('rmModal')"><i class="fas fa-trash-alt"></i> Delete voucher</button>
+    </div>
+
+    <div class="vstats">
+        <div class="tile">
+            <div class="lab">Beginning</div>
+            <div class="num" id="c_beg"><?= $beginning ?></div>
+            <div class="sub">vouchers in stock at the start</div>
+        </div>
+        <div class="tile t-out">
+            <div class="lab">Total out</div>
+            <div class="num" id="c_out"><?= $total_out ?></div>
+            <div class="sub">given to customers</div>
+        </div>
+        <div class="tile t-end <?= $ending < 0 ? 'neg' : '' ?>" id="endCard">
+            <div class="lab">Ending</div>
+            <div class="num" id="c_end"><?= $ending ?></div>
+            <div class="sub" id="endNote"><?= $ending < 0 ? 'Over the beginning stock' : 'still available' ?></div>
+            <div class="meter"><span id="usedBar" style="width:<?= $beginning > 0 ? min(100, round($total_out / $beginning * 100)) : 0 ?>%"></span></div>
+        </div>
+        <div class="tile t-av">
+            <div class="lab">Availed</div>
+            <div class="num" id="c_av"><?= $availed ?></div>
+            <div class="sub">with a date availed</div>
+        </div>
+    </div>
 
     <div class="panel">
-<?php if (!$cur): ?>
-    <div class="empty">
-        <?php if ($is_admin): ?>No vouchers yet. Click <b>New voucher</b> to add one, or import <b>voucher_monitoring_setup.sql</b> to load your Excel data.
-        <?php else: ?>No vouchers have been set up yet. Please ask an admin to add them.<?php endif; ?>
-    </div>
-<?php else: ?>
-    <?php if (!$cashier_view): ?>
-    <dl class="figures">
-        <div>
-            <dt>Beginning</dt>
-            <dd id="c_beg"><?= $beginning ?></dd>
-            <?php if ($is_admin): ?><dd style="margin:0"><small><button class="linkbtn" onclick="openModal('begModal')">Change</button></small></dd><?php endif; ?>
-        </div>
-        <div>
-            <dt>Total out</dt>
-            <dd id="c_out"><?= $total_out ?></dd>
-        </div>
-        <div id="endCard" class="<?= $ending < 0 ? 'neg' : '' ?>">
-            <dt>Ending</dt>
-            <dd id="c_end"><?= $ending ?></dd>
-            <dd style="margin:0"><small id="endNote"><?= $ending < 0 ? 'Over the beginning stock' : 'still available' ?></small></dd>
-        </div>
-        <div>
-            <dt>Availed</dt>
-            <dd id="c_av"><?= $availed ?></dd>
-        </div>
-    </dl>
-    <?php endif; ?>
-
     <div class="toolbar">
         <input type="text" id="q" value="<?= h($q) ?>" placeholder="Search series no., name, note" autocomplete="off" oninput="searchSoon()" onkeydown="if(event.key==='Enter'){event.preventDefault();applyFilters();}">
         <label><input type="checkbox" id="onlyOut" <?= $only_out ? 'checked' : '' ?> onchange="applyFilters()"> Given out only</label>
@@ -568,7 +570,6 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         <div class="spacer"></div>
         <span id="saveState" class="savestate">Changes save automatically</span>
         <a class="btn plain" href="voucher_export.php" title="Download every voucher as its own sheet in one Excel file"><i class="fas fa-file-excel"></i> Export to Excel</a>
-        <?php if ($is_admin): ?><button type="button" class="btn danger-outline" onclick="openModal('rmModal')"><i class="fas fa-trash-alt"></i> Remove voucher</button><?php endif; ?>
     </div>
 
     <div class="table-wrap">
@@ -595,7 +596,7 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
             <?php endforeach; ?>
             </tbody>
         </table>
-        <?php if (!$rows && !$total_rows): ?><div class="empty"><?= $is_admin ? 'No series rows yet. Click <b>Change</b> under Beginning and enter the number of vouchers.' : 'No series rows yet. Please ask an admin to set the beginning stock.' ?></div>
+        <?php if (!$rows && !$total_rows): ?><div class="empty">No series rows yet. Click <b>Edit voucher</b> and enter the number of vouchers.</div>
         <?php elseif (!$rows): ?><div class="empty">No vouchers match your search.</div><?php endif; ?>
     </div>
 
@@ -611,13 +612,29 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
         </div>
     </div>
     <?php endif; ?>
+    </div><!-- /panel -->
 
-    <?php if ($is_admin): ?>
-    <!-- Remove voucher (admin only) -->
+    <!-- Edit voucher -->
+    <div class="modal-bg" id="editModal">
+        <form class="modal" method="POST">
+            <h2>Edit voucher</h2>
+            <input type="hidden" name="token" value="<?= h($_SESSION['vm_token']) ?>">
+            <input type="hidden" name="type_id" value="<?= $type_id ?>">
+            <input type="hidden" name="action" value="edit_type">
+            <div class="field"><label>Voucher name</label><input type="text" name="name" value="<?= h($cur['name']) ?>" required></div>
+            <div class="field"><label>Beginning (number of vouchers)</label><input type="number" min="0" max="5000" name="beginning" value="<?= $beginning ?>" required></div>
+            <div class="actions">
+                <button type="button" class="btn plain" onclick="closeModal('editModal')">Cancel</button>
+                <button class="btn">Save changes</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Delete voucher -->
     <div class="modal-bg" id="rmModal">
         <form class="modal" method="POST" onsubmit="return rmReady();">
-            <h2>Remove this voucher?</h2>
-            <p class="rm-text">This permanently removes <b><?= h($cur['name']) ?></b> and all <b><?= $total_rows ?> entries</b> in it (customers, dates, notes). It cannot be undone.</p>
+            <h2>Delete this voucher?</h2>
+            <p class="rm-text">This permanently deletes <b><?= h($cur['name']) ?></b> and all <b><?= $total_rows ?> entries</b> in it (customers, dates, notes). It cannot be undone.</p>
             <p class="rm-text"><a href="voucher_export.php">Download an Excel backup first</a></p>
             <input type="hidden" name="token" value="<?= h($_SESSION['vm_token']) ?>">
             <input type="hidden" name="type_id" value="<?= $type_id ?>">
@@ -626,34 +643,16 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
                 <input type="text" name="confirm_name" id="rmName" autocomplete="off" placeholder="<?= h($cur['name']) ?>" oninput="rmCheck()"></div>
             <div class="actions">
                 <button type="button" class="btn plain" onclick="closeModal('rmModal')">Cancel</button>
-                <button class="btn rmgo" id="rmGo" disabled>Remove voucher</button>
+                <button class="btn rmgo" id="rmGo" disabled>Delete voucher</button>
             </div>
         </form>
     </div>
-
-    <!-- Beginning stock (admin only) -->
-    <div class="modal-bg" id="begModal">
-        <form class="modal" method="POST" style="max-width:340px">
-            <h2>Beginning stock</h2>
-            <input type="hidden" name="token" value="<?= h($_SESSION['vm_token']) ?>">
-            <input type="hidden" name="type_id" value="<?= $type_id ?>">
-            <input type="hidden" name="action" value="set_beginning">
-            <div class="field"><label>Beginning (number of vouchers)</label><input type="number" min="0" name="beginning" value="<?= $beginning ?>" required></div>
-            <div class="actions">
-                <button type="button" class="btn plain" onclick="closeModal('begModal')">Cancel</button>
-                <button class="btn">Save</button>
-            </div>
-        </form>
-    </div>
-    <?php endif; ?>
 <?php endif; ?>
-    </div><!-- /panel -->
 
-<?php if ($is_admin): ?>
-    <!-- New voucher type (admin only) -->
+    <!-- Add voucher -->
     <div class="modal-bg" id="typeModal">
         <form class="modal" method="POST">
-            <h2>New voucher</h2>
+            <h2>Add voucher</h2>
             <input type="hidden" name="token" value="<?= h($_SESSION['vm_token']) ?>">
             <input type="hidden" name="type_id" value="<?= $type_id ?>">
             <input type="hidden" name="action" value="add_type">
@@ -665,7 +664,6 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
             </div>
         </form>
     </div>
-<?php endif; ?>
 </div>
 
 <?php else: ?>
@@ -1068,6 +1066,8 @@ function saveField(inp, val){
         document.getElementById('c_end').textContent = j.ending;
         document.getElementById('c_av').textContent = j.availed;
         document.getElementById('endCard').classList.toggle('neg', j.ending < 0);
+        const ub = document.getElementById('usedBar'); if (ub) ub.style.width = (j.beginning > 0 ? Math.min(100, Math.round(j.total_out / j.beginning * 100)) : 0) + '%';
+        const vc = document.getElementById('vcCount'); if (vc) vc.innerHTML = j.total_out + ' out &middot; ' + j.ending + ' left';
         document.getElementById('endNote').textContent = j.ending < 0 ? 'Over the beginning stock' : 'still available';
         setState('All changes saved');
       })
