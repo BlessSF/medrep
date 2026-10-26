@@ -1,4 +1,3 @@
-
 <?php
 session_start();
 
@@ -227,7 +226,7 @@ body {
     max-width: 900px; /* Was 1510px -- far wider than the form/table
                           inside it ever needed, which is what made
                           the page look stretched out edge-to-edge. */
-    margin: 72px auto 30px; /* Adjust for fixed header (now slightly taller with the logo badge), and center it */
+    margin: 130px auto 30px; /* Adjust for fixed header + Transaction/Voucher tab bar (now slightly taller with the logo badge), and center it */
     padding: 20px;
     background-color: white;
     border-radius: 10px;
@@ -432,7 +431,7 @@ tr:nth-child(even) {
         max-width: 100%;
         padding: 14px;
         border-radius: 0;
-        margin-top: 100px; /* header wraps to 2 lines on very narrow screens */
+        margin-top: 160px; /* header wraps to 2 lines on very narrow screens */
     }
 
     form {
@@ -1128,7 +1127,7 @@ setTimeout(() => {
 <body>
 <?php if (!empty($error_message)): ?>
     <div id='errorMessage' style='position: absolute;
-            top: 70px; 
+            top: 120px; 
             width: 60%;
             left: 50%;
             transform: translateX(-50%);
@@ -1146,7 +1145,7 @@ setTimeout(() => {
 
 <?php if (!empty($success_message)): ?>
     <div id='successMessage' style='position: absolute;
-            top: 70px; 
+            top: 120px; 
             left: 50%;
             transform: translateX(-50%);
             padding: 10px;
@@ -1173,6 +1172,8 @@ setTimeout(() => {
         <i class="fas fa-sign-out-alt"></i> Logout
     </a>
 </div>
+
+<?php require_once __DIR__ . '/includes/cashier_tabs.php'; cashier_tabs('transaction'); ?>
 
 
 

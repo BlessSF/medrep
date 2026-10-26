@@ -20,7 +20,7 @@ require_once __DIR__ . '/includes/db_config.php';
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
-if (!isset($_SESSION['username']) || empty($_SESSION['admin'])) {
+if (!isset($_SESSION['username']) || (empty($_SESSION['admin']) && empty($_SESSION['cashier']))) {   // admin or cashier
     header("Location: index.php");
     exit();
 }
