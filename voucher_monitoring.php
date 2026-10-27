@@ -502,6 +502,20 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
 <div class="page">
     <?php if ($flash): ?><div class="flash <?= h($flash_type) ?>"><?= h($flash) ?></div><?php endif; ?>
 
+    <?php $all_out = 0; $all_beg = 0; $others_out = 0;
+          foreach ($types as $tt) { $all_out += (int)$tt['total_out']; $all_beg += (int)$tt['beginning']; if ($tt['id'] != $type_id) $others_out += (int)$tt['total_out']; } ?>
+    <div class="vhead" id="vhead" data-others="<?= $others_out ?>" data-beg="<?= $all_beg ?>">
+        <div>
+            <h1>Voucher Monitoring</h1>
+            <p>Track every voucher from stock to customer to redeemed.</p>
+        </div>
+        <div class="head-stats">
+            <div class="stat"><b><?= count($types) ?></b><span>Vouchers</span></div>
+            <div class="stat"><b id="allOut"><?= number_format($all_out) ?></b><span>Total given out</span></div>
+            <div class="stat"><b id="allLeft"><?= number_format($all_beg - $all_out) ?></b><span>Total left in stock</span></div>
+        </div>
+    </div>
+
     <div class="vsec"><h2>Vouchers</h2></div>
     <div class="vpick">
         <?php foreach ($types as $t):
@@ -1060,6 +1074,8 @@ function saveField(inp, val){
         document.getElementById('endCard').classList.toggle('neg', j.ending < 0);
         const ub = document.getElementById('usedBar'); if (ub) ub.style.width = (j.beginning > 0 ? Math.min(100, Math.round(j.total_out / j.beginning * 100)) : 0) + '%';
         const vc = document.getElementById('vcCount'); if (vc) vc.innerHTML = j.total_out + ' out &middot; ' + j.ending + ' left';
+        const vh = document.getElementById('vhead');
+        if (vh) { const go = (+vh.dataset.others) + (+j.total_out); document.getElementById('allOut').textContent = go.toLocaleString('en-US'); document.getElementById('allLeft').textContent = ((+vh.dataset.beg) - go).toLocaleString('en-US'); }
         document.getElementById('endNote').textContent = j.ending < 0 ? 'Over the beginning stock' : 'still available';
         setState('All changes saved');
       })

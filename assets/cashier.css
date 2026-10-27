@@ -46,9 +46,8 @@ body.cx a { color: var(--brand-700); }
 .appbar {
   position: sticky; top: 0; z-index: 70; height: 64px;
   display: flex; align-items: center; gap: 22px; padding: 0 28px;
-  background: rgba(255, 255, 255, .92);
-  -webkit-backdrop-filter: saturate(1.4) blur(10px); backdrop-filter: saturate(1.4) blur(10px);
-  border-bottom: 1px solid var(--line);
+  background: linear-gradient(100deg, #0f4a25 0%, #1a7f3c 60%, #22a24b 100%);
+  border-bottom: 1px solid rgba(0, 0, 0, .15); box-shadow: 0 4px 16px rgba(15, 74, 37, .25);
 }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--ink); }
 .brand-logo {
@@ -251,7 +250,7 @@ table.list { width: 100%; border-collapse: separate; border-spacing: 0; }
   .list-tools .tool-search { grid-column: 1 / -1; }
 }
 @media (max-width: 760px) {
-  .appbar { padding: 0 14px; gap: 12px; -webkit-backdrop-filter: none; backdrop-filter: none; background: #fff; }
+  .appbar { padding: 0 14px; gap: 12px; }
   .brand-text, .user-meta, .logout span { display: none; }
   .logout { width: 36px; padding: 0; justify-content: center; }
   .cx-main { padding: 18px 14px 96px; }
@@ -319,3 +318,30 @@ body.cashier.cx .toolbar input[type="text"], body.cashier.cx .toolbar select { b
 .flash-banner { max-width: 1440px; margin: 14px auto 0; padding: 12px 16px; border-radius: 10px; font-weight: 600; background: var(--brand-100); color: #155724; }
 .flash-banner.error { background: var(--danger-bg); color: #8a1f2b; }
 [hidden] { display: none !important; }
+
+/* voucher page (cashier): overall totals strip */
+body.cashier.cx .vhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+body.cashier.cx .vhead h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.5px; }
+body.cashier.cx .vhead p { margin: 3px 0 0; color: var(--muted); font-size: 14px; }
+body.cashier.cx .head-stats { display: flex; gap: 12px; flex-wrap: wrap; }
+body.cashier.cx .stat { min-width: 140px; padding: 11px 18px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-sm); }
+body.cashier.cx .stat b { display: block; font-size: 22px; line-height: 1.15; font-variant-numeric: tabular-nums; letter-spacing: -.3px; }
+body.cashier.cx .stat span { font-size: 12px; color: var(--muted); }
+
+/* green app bar: light-on-dark overrides */
+.appbar .brand, .appbar .brand-name, .appbar .user-name { color: #fff; }
+.appbar .brand-sub, .appbar .user-role { color: rgba(255, 255, 255, .72); }
+.appbar .brand-logo { background: #fff; color: var(--brand-700); box-shadow: 0 4px 12px rgba(0, 0, 0, .2); }
+.appbar .nav { background: rgba(255, 255, 255, .14); }
+.appbar .nav a { color: rgba(255, 255, 255, .85); }
+.appbar .nav a:hover { color: #fff; background: rgba(255, 255, 255, .1); }
+.appbar .nav a.active { background: #fff; color: var(--brand-700); }
+.appbar .avatar { background: #fff; color: var(--brand-700); }
+.appbar .logout { background: rgba(255, 255, 255, .12); border-color: rgba(255, 255, 255, .35); color: #fff; }
+.appbar .logout:hover { background: #fff; border-color: #fff; color: var(--danger); }
+@media (max-width: 760px) {
+  .appbar .nav { background: #fff; }
+  .appbar .nav a { color: var(--ink-2); }
+  .appbar .nav a:hover { background: transparent; color: var(--brand-700); }
+  .appbar .nav a.active { background: var(--brand-50); color: var(--brand-700); }
+}
