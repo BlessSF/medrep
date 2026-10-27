@@ -492,20 +492,12 @@ function fmt_date($d) { return $d ? date('F j, Y', strtotime($d)) : ''; }
             .header h1 { font-size: 16px; }
         }
     </style>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+    <link rel="stylesheet" href="assets/cashier.css">
 </head>
-<body class="cashier">
+<body class="cashier cx">
 
-<div class="header">
-    <div class="header-brand">
-        <div class="header-logo"><i class="fas fa-hand-holding-medical"></i></div>
-        <div>
-            <h1>Medrep Daily Transaction</h1>
-            <span class="header-subtitle"><i class="fas fa-circle-user"></i> Hello, <?= h($admin_username) ?></span>
-        </div>
-    </div>
-    <a href="index.php?logout=true" class="logout-button"><i class="fas fa-sign-out-alt"></i> Logout</a>
-</div>
-<?php require_once __DIR__ . '/includes/cashier_tabs.php'; cashier_tabs('voucher'); ?>
+<?php require_once __DIR__ . '/includes/cashier_ui.php'; cashier_appbar('voucher', $admin_username); ?>
 
 <div class="page">
     <?php if ($flash): ?><div class="flash <?= h($flash_type) ?>"><?= h($flash) ?></div><?php endif; ?>
