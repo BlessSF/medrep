@@ -636,6 +636,17 @@ $balance_history_labels = array_values($balance_history_labels);
         .modal form { display: block; }
         .modal label { display: block; margin-top: 12px; margin-bottom: 4px; }
         .modal input, .modal select { display: block; width: 100%; }
+
+        /* ---- transactions table: top scrollbar + sticky header ---- */
+        .txn-scroll-top { overflow-x: auto; overflow-y: hidden; height: 16px; margin: 0 0 6px; background: #fff; border: 1px solid #cfe3d3; border-radius: 8px; }
+        .txn-scroll-top > div { height: 1px; }
+        .txn-scroll-top::-webkit-scrollbar, #txnWrap::-webkit-scrollbar { height: 12px; width: 12px; }
+        .txn-scroll-top::-webkit-scrollbar-thumb, #txnWrap::-webkit-scrollbar-thumb { background: #1b5e20; border-radius: 8px; }
+        .txn-scroll-top::-webkit-scrollbar-track, #txnWrap::-webkit-scrollbar-track { background: #e6f4e8; }
+        #txnWrap { overflow: auto !important; max-height: 75vh; }
+        #txnWrap #txnTable { overflow: visible !important; }
+        #txnWrap #txnTable thead th { position: sticky; top: 0; z-index: 3; }
+        #txnTable td:first-child, #txnTable th:first-child { white-space: nowrap; }
     </style>
     <script src="assets/table-search.js"></script>
     <script src="assets/inline-edit.js"></script>
@@ -797,7 +808,8 @@ $balance_history_labels = array_values($balance_history_labels);
         <input type="text" id="txnSearch" placeholder="Search this table (date, cashier, amount, remarks...)">
     </div>
 
-    <div class="transactions-container table-scroll">
+    <div class="txn-scroll-top" id="txnScrollTop" aria-hidden="true"><div></div></div>
+    <div class="transactions-container table-scroll" id="txnWrap">
     <table class="transactions-table" id="txnTable">
     <thead>
         <tr>
@@ -1149,5 +1161,19 @@ setTimeout(function () {
 })();
 </script>
 
+<script>
+// Mirror scrollbar above the transactions table (kept in sync both ways)
+(function () {
+    var top = document.getElementById('txnScrollTop'), wrap = document.getElementById('txnWrap'), tbl = document.getElementById('txnTable');
+    if (!top || !wrap || !tbl) return;
+    var inner = top.firstElementChild, lock = false;
+    function size() { inner.style.width = tbl.scrollWidth + 'px'; top.style.display = tbl.scrollWidth > wrap.clientWidth ? '' : 'none'; }
+    top.addEventListener('scroll', function () { if (lock) { lock = false; return; } lock = true; wrap.scrollLeft = top.scrollLeft; });
+    wrap.addEventListener('scroll', function () { if (lock) { lock = false; return; } lock = true; top.scrollLeft = wrap.scrollLeft; });
+    window.addEventListener('resize', size);
+    if (window.ResizeObserver) new ResizeObserver(size).observe(tbl);
+    size();
+})();
+</script>
 </body>
 </html>
