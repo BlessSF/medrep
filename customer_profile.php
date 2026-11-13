@@ -643,9 +643,10 @@ $balance_history_labels = array_values($balance_history_labels);
         .txn-scroll-top::-webkit-scrollbar, #txnWrap::-webkit-scrollbar { height: 12px; width: 12px; }
         .txn-scroll-top::-webkit-scrollbar-thumb, #txnWrap::-webkit-scrollbar-thumb { background: #1b5e20; border-radius: 8px; }
         .txn-scroll-top::-webkit-scrollbar-track, #txnWrap::-webkit-scrollbar-track { background: #e6f4e8; }
-        #txnWrap { overflow: auto !important; max-height: 75vh; }
+        #txnWrap { overflow: auto !important; max-height: 75vh; padding: 0 !important; border-radius: 12px !important; }
+        #txnWrap #txnTable { margin: 0; width: 100%; }
         #txnWrap #txnTable { overflow: visible !important; }
-        #txnWrap #txnTable thead th { position: sticky; top: 0; z-index: 3; }
+        #txnWrap #txnTable thead th { position: sticky; top: 0; z-index: 3; background: #1b5e20 !important; box-shadow: 0 2px 0 #2e7d32; }
         #txnTable td:first-child, #txnTable th:first-child { white-space: nowrap; }
     </style>
     <script src="assets/table-search.js"></script>
