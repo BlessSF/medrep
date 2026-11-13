@@ -14,6 +14,10 @@
 //  message and others need to respond with JSON.
 // ============================================================
 
+// All times in this app are Philippine time (UTC+8, no DST), regardless of
+// where the hosting server is located.
+date_default_timezone_set('Asia/Manila');
+
 // Show PHP errors on-screen only while actively debugging locally.
 // Leaving display_errors on in production (as every page used to)
 // prints file paths, table/column names, and query fragments to
@@ -45,3 +49,8 @@ $password   = "Medrep123";
 $dbname     = "u905106266_medrep";
 
 $conn = new mysqli($servername, $username, $password, $dbname);
+
+// Make MySQL's NOW()/CURDATE() and TIMESTAMP columns use Philippine time too.
+if (!$conn->connect_error) {
+    $conn->query("SET time_zone = '+08:00'");
+}
